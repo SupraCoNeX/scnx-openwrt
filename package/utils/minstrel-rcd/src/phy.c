@@ -33,6 +33,9 @@ phy_event_read_buf(struct phy *phy, char *buf)
 		*next = 0;
 
 		rcd_client_phy_event(phy, cur);
+#ifdef CONFIG_MQTT
+		mqtt_phy_event(phy, cur);
+#endif
 	}
 
 	len = strlen(cur);
@@ -176,6 +179,23 @@ void rcd_phy_dump(struct client *cl, struct phy *phy)
 	fclose(f);
 }
 
+#ifdef CONFIG_MQTT
+void mqtt_phy_dump(struct phy *phy, int (*cb)(void*, char*), void *cb_arg)
+{
+	char buf[128];
+	FILE *f;
+
+	f = fopen(phy_file_path(phy, "api_info"), "r");
+	if (!f)
+		return;
+
+	while (fgets(buf, sizeof(buf), f) != NULL)
+		cb(cb_arg, buf);
+
+	fclose(f);
+}
+#endif
+
 void rcd_phy_control(struct client *cl, char *data)
 {
 	struct phy *phy;
@@ -208,6 +228,13 @@ retry:
 	return;
 
 error:
+#ifdef CONFIG_MQTT
+	/* do not send error messages over mqtt */
+	if (!cl) {
+		fprintf(stderr, "mqtt command '%s' failed: %s\n", data, err);
+		return;
+	}
+#endif
 	client_printf(cl, "*;0;#error;%s\n", err);
 }
 
