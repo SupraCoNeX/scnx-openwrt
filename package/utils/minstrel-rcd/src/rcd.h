@@ -15,7 +15,20 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#ifdef CONFIG_MQTT
+#include <mosquitto.h>
+
+#define MQTT_PORT 1883
+#endif
+
 #define RCD_PORT 0x5243
+
+extern const char *config_path;
+
+#ifdef CONFIG_MQTT
+extern const char *global_id;
+extern const char *global_topic;
+#endif
 
 struct phy {
 	struct vlist_node node;
@@ -35,6 +48,21 @@ struct server {
 	struct uloop_fd fd;
 	const char *addr;
 };
+
+#ifdef CONFIG_MQTT
+struct mqtt_context {
+	struct list_head list;
+	struct mosquitto *mosq;
+	const char *id;
+	char *addr;
+	int port;
+	const char *bind_addr;
+	const char *topic_prefix;
+	struct uloop_fd fd;
+	bool init_done;
+};
+#endif
+
 
 static inline const char *phy_name(struct phy *phy)
 {
@@ -57,5 +85,18 @@ void rcd_phy_control(struct client *cl, char *data);
 
 #define client_printf(cl, ...) ustream_printf(&(cl)->sfd.stream, __VA_ARGS__)
 #define client_phy_printf(cl, phy, fmt, ...) client_printf(cl, "%s;" fmt, phy_name(phy), ## __VA_ARGS__)
+
+#ifdef CONFIG_MQTT
+void rcd_config_init(void);
+void mqtt_init(void);
+void mqtt_broker_add(const char *addr, int port, const char *bind, const char *id,
+					 const char *prefix);
+void mqtt_broker_add_cli(const char *addr, const char *bind, const char *id, const char *prefix);
+int mqtt_publish_event(const struct phy *phy, const char *str);
+void mqtt_stop(void);
+
+void mqtt_phy_dump(struct phy *phy, int (*cb)(void *, char*), void *cb_arg);
+void mqtt_phy_event(struct phy *phy, const char *str);
+#endif
 
 #endif
