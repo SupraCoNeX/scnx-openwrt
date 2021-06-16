@@ -1,9 +1,13 @@
 name: ath79-builder
 
+env:
+  TARGET: ath79
+
 on:
   push:
     branches:
       - master
+  workflow_dispatch:
 
   jobs:
     push:
@@ -28,7 +32,7 @@ on:
 
         - name: Prepare Config
           run: |
-            echo CONFIG_TARGET_ath79=y > .config
+            echo CONFIG_TARGET_${{ env.TARGET }}=y > .config
             echo CONFIG_IB=y >> .config
             echo CONFIG_ALL_KMODS=y >> .config
             echo CONFIG_ALL_NONSHARED=y >> .config
@@ -37,3 +41,16 @@ on:
 
         - name: Build Image
           run: make -j2
+
+        - name: Store build logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v1
+        with:
+          name: ${{ env.TARGET }}_logs
+          path: ooutput/logs
+        - name: Store build output
+          uses: actions/upload-artifact@v1
+          with:
+            name: ${{ env.TARGET }}_img
+            path: output/images
+
