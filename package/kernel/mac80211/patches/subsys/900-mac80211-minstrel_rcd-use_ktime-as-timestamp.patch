@@ -15,7 +15,7 @@ Index: backports-5.10.42-1/net/mac80211/rc80211_minstrel_ht_api.c
 +	time_in_sec = ktime_get_real_fast_ns();
 +	time_part_in_nanosec = do_div(time_in_sec, 1000000000);
 +
-+	ofs += scnprintf(info + ofs, sizeof(info) - ofs, "%.10llu;%.10u;sta;%s;%pM;%x;%x;",
++	ofs += scnprintf(info + ofs, sizeof(info) - ofs, "%.10llu;%.9u;sta;%s;%pM;%x;%x;",
 +			time_in_sec, time_part_in_nanosec, type, mi->sta->addr,
 +			mi->overhead, mi->overhead_legacy);
  
@@ -40,7 +40,7 @@ Index: backports-5.10.42-1/net/mac80211/rc80211_minstrel_ht_api.c
 +	time_in_sec = ktime_get_real_fast_ns();
 +	time_part_in_nanosec = do_div(time_in_sec, 1000000000);
 +
-+	ofs = scnprintf(info, sizeof(info), "%.10llu;%.10u;sta;remove;%pM;;;\n",
++	ofs = scnprintf(info, sizeof(info), "%.10llu;%.9u;sta;remove;%pM;;;\n",
 +			time_in_sec, time_part_in_nanosec, mi->sta->addr);
  	relay_write(mp->relay_ev, info, ofs);
  	relay_flush(mp->relay_ev);
@@ -57,7 +57,7 @@ Index: backports-5.10.42-1/net/mac80211/rc80211_minstrel_ht_api.c
 +	time_in_sec = ktime_get_real_fast_ns();
 +	time_part_in_nanosec = do_div(time_in_sec, 1000000000);
 +
-+	ofs += scnprintf(txs, sizeof(txs), "%.10llu;%.10u;txs;%pM;%x;%x;%x",
++	ofs += scnprintf(txs, sizeof(txs), "%.10llu;%.9u;txs;%pM;%x;%x;%x",
 +			 time_in_sec, time_part_in_nanosec,
  			 mi->sta->addr,
  			 info->status.ampdu_len,
@@ -78,7 +78,7 @@ Index: backports-5.10.42-1/net/mac80211/rc80211_minstrel_ht_api.c
  	ofs = scnprintf(stat, sizeof(stat),
 -			"%llx;stats;%pM;%x;%x;%x;%x;%x;%x;%x\n",
 -			(unsigned long long)ktime_get_boottime_ns(),
-+			"%.10llu;%.10u;stats;%pM;%x;%x;%x;%x;%x;%x;%x\n",
++			"%.10llu;%.9u;stats;%pM;%x;%x;%x;%x;%x;%x;%x\n",
 +			time_in_sec, time_part_in_nanosec,
  			mi->sta->addr, rate,
  			MINSTREL_TRUNC(mrs->prob_avg * 1000), tp,
