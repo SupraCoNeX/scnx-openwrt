@@ -1,0 +1,38 @@
+--- a/net/mac80211/rc80211_minstrel_ht_api.c
++++ b/net/mac80211/rc80211_minstrel_ht_api.c
+@@ -7,6 +7,7 @@
+ #include <linux/relay.h>
+ #include <net/mac80211.h>
+ #include "rc80211_minstrel_ht.h"
++#include "sta_info.h"
+ 
+ enum sta_cmd {
+ 	STA_CMD_PROBE,
+@@ -37,7 +38,7 @@ minstrel_ht_read_api_info(struct seq_fil
+ 
+ 	seq_printf(s, "#group;index;offset;type;nss;bw;gi;airtime\n");
+ 	seq_printf(s, "#sta;action;macaddr;overhead_mcs;overhead_legacy;supported\n");
+-	seq_printf(s, "#txs;macaddr;num_frames;num_acked;probe");
++	seq_printf(s, "#txs;macaddr;rssi;num_frames;num_acked;probe");
+ 	for (i = 0; i < IEEE80211_TX_MAX_RATES; i++)
+ 		seq_printf(s, ";rate%d,count%d", i, i);
+ 	seq_printf(s, "\n");
+@@ -479,13 +480,17 @@ void __minstrel_ht_report_tx_status(stru
+ 	int i;
+ 	u64 time_in_sec;
+ 	u32 time_part_in_nanosec;
++	struct sta_info *sta;
+ 
+ 	time_in_sec = ktime_get_real_fast_ns();
+ 	time_part_in_nanosec = do_div(time_in_sec, 1000000000);
+ 
+-	ofs += scnprintf(txs, sizeof(txs), "%.10llu;%.9u;txs;%pM;%x;%x;%x",
++	sta = container_of(mi->sta, struct sta_info, sta);
++
++	ofs += scnprintf(txs, sizeof(txs), "%.10llu;%.9u;txs;%pM;%x;%x;%x;%x",
+ 			 time_in_sec, time_part_in_nanosec,
+ 			 mi->sta->addr,
++			 sta->rx_stats.last_signal,
+ 			 info->status.ampdu_len,
+ 			 info->status.ampdu_ack_len,
+ 			 !!(info->flags & IEEE80211_TX_CTL_RATE_CTRL_PROBE));
