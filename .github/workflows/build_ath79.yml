@@ -48,8 +48,9 @@ on:
           with:
             name: ${{ env.TARGET }}_logs
             path: ooutput/logs
-          - name: Store build output
-            uses: actions/upload-artifact@v1
-            with:
-              name: ${{ env.TARGET }}_img
-              path: output/images
+
+        - name: Store build output
+          uses: actions/upload-artifact@v1
+          with:
+            name: ${{ env.TARGET }}_img
+            path: output/images
