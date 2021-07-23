@@ -47,7 +47,7 @@ jobs:
         uses: actions/upload-artifact@v1
         with:
           name: ${{ env.TARGET }}_logs
-          path: ooutput/logs
+          path: output/logs
 
       - name: Store build output
         uses: actions/upload-artifact@v1
