@@ -42,15 +42,8 @@ jobs:
       - name: Build Image
         run: make -j2
 
-      - name: Store build logs
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v1
-        with:
-          name: ${{ env.TARGET }}_logs
-          path: output/logs
-
       - name: Store build output
         uses: actions/upload-artifact@v1
         with:
           name: ${{ env.TARGET }}_img
-          path: output/images
+          path: bin/targets
