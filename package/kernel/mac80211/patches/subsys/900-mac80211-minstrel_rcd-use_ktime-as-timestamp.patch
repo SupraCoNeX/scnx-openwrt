@@ -1,7 +1,5 @@
-Index: backports-5.10.42-1/net/mac80211/rc80211_minstrel_ht_api.c
-===================================================================
---- backports-5.10.42-1.orig/net/mac80211/rc80211_minstrel_ht_api.c
-+++ backports-5.10.42-1/net/mac80211/rc80211_minstrel_ht_api.c
+--- a/net/mac80211/rc80211_minstrel_ht_api.c
++++ b/net/mac80211/rc80211_minstrel_ht_api.c
 @@ -103,10 +103,15 @@ minstrel_ht_dump_sta(struct minstrel_pri
  	char info[64 + MINSTREL_GROUPS_NB * 4];
  	int ofs = 0;
@@ -45,12 +43,15 @@ Index: backports-5.10.42-1/net/mac80211/rc80211_minstrel_ht_api.c
  	relay_write(mp->relay_ev, info, ofs);
  	relay_flush(mp->relay_ev);
  
-@@ -468,9 +477,14 @@ void __minstrel_ht_report_tx_status(stru
+@@ -469,12 +478,17 @@ void __minstrel_ht_report_tx_status(stru
  	char txs[64 + IEEE80211_TX_MAX_RATES * 8];
  	int ofs = 0;
  	int i;
 +	u64 time_in_sec;
 +	u32 time_part_in_nanosec;
+ 
+ 	if (!n_rates)
+ 		return;
  
 -	ofs += scnprintf(txs, sizeof(txs), "%llx;txs;%pM;%x;%x;%x",
 -			 (unsigned long long)ktime_get_boottime_ns(),
@@ -62,7 +63,7 @@ Index: backports-5.10.42-1/net/mac80211/rc80211_minstrel_ht_api.c
  			 mi->sta->addr,
  			 info->status.ampdu_len,
  			 info->status.ampdu_ack_len,
-@@ -493,13 +507,18 @@ void __minstrel_ht_report_rate_update(st
+@@ -500,13 +514,18 @@ void __minstrel_ht_report_rate_update(st
  	char stat[100];
  	int ofs;
  	int tp;
