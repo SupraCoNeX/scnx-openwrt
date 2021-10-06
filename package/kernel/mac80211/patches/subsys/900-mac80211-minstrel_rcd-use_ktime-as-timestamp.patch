@@ -1,86 +1,47 @@
 --- a/net/mac80211/rc80211_minstrel_ht_api.c
 +++ b/net/mac80211/rc80211_minstrel_ht_api.c
-@@ -103,10 +103,15 @@ minstrel_ht_dump_sta(struct minstrel_pri
- 	char info[64 + MINSTREL_GROUPS_NB * 4];
- 	int ofs = 0;
+@@ -105,8 +105,8 @@ minstrel_ht_dump_sta(struct minstrel_pri
  	int i;
-+	u64 time_in_sec;
-+	u32 time_part_in_nanosec;
  
--	ofs += scnprintf(info + ofs, sizeof(info) - ofs, "%llx;sta;%s;%pM;%x;%x;",
+ 	ofs += scnprintf(info + ofs, sizeof(info) - ofs, "%llx;sta;%s;%pM;%x;%x;",
 -			(unsigned long long)ktime_get_boottime_ns(),
 -			 type, mi->sta->addr, mi->overhead, mi->overhead_legacy);
-+	time_in_sec = ktime_get_real_fast_ns();
-+	time_part_in_nanosec = do_div(time_in_sec, 1000000000);
-+
-+	ofs += scnprintf(info + ofs, sizeof(info) - ofs, "%.10llu;%.9u;sta;%s;%pM;%x;%x;",
-+			time_in_sec, time_part_in_nanosec, type, mi->sta->addr,
-+			mi->overhead, mi->overhead_legacy);
++			(unsigned long long)ktime_get_real_fast_ns(),
++			type, mi->sta->addr, mi->overhead, mi->overhead_legacy);
  
  	ofs += scnprintf(info + ofs, sizeof(info) - ofs, "%x",
  			 mi->supported[0]);
-@@ -443,6 +448,8 @@ void minstrel_ht_sta_remove(struct minst
- {
- 	char info[64];
- 	int ofs = 0;
-+	u64 time_in_sec;
-+	u32 time_part_in_nanosec;
- 
- 	spin_lock_bh(&mp->lock);
- 	list_del_init(&mi->list);
-@@ -450,9 +457,11 @@ void minstrel_ht_sta_remove(struct minst
+@@ -450,8 +450,9 @@ void minstrel_ht_sta_remove(struct minst
  	if (!mp->monitor)
  		goto out;
  
--	ofs = scnprintf(info, sizeof(info), "%llx;sta;remove;%pM;;;\n",
--			(unsigned long long)ktime_get_boottime_ns(),
--			mi->sta->addr);
-+	time_in_sec = ktime_get_real_fast_ns();
-+	time_part_in_nanosec = do_div(time_in_sec, 1000000000);
 +
-+	ofs = scnprintf(info, sizeof(info), "%.10llu;%.9u;sta;remove;%pM;;;\n",
-+			time_in_sec, time_part_in_nanosec, mi->sta->addr);
+ 	ofs = scnprintf(info, sizeof(info), "%llx;sta;remove;%pM;;;\n",
+-			(unsigned long long)ktime_get_boottime_ns(),
++			(unsigned long long)ktime_get_real_fast_ns(),
+ 			mi->sta->addr);
  	relay_write(mp->relay_ev, info, ofs);
  	relay_flush(mp->relay_ev);
- 
-@@ -469,12 +478,17 @@ void __minstrel_ht_report_tx_status(stru
- 	char txs[64 + IEEE80211_TX_MAX_RATES * 8];
- 	int ofs = 0;
- 	int i;
-+	u64 time_in_sec;
-+	u32 time_part_in_nanosec;
- 
+@@ -473,8 +474,9 @@ void __minstrel_ht_report_tx_status(stru
  	if (!n_rates)
  		return;
  
--	ofs += scnprintf(txs, sizeof(txs), "%llx;txs;%pM;%x;%x;%x",
--			 (unsigned long long)ktime_get_boottime_ns(),
-+	time_in_sec = ktime_get_real_fast_ns();
-+	time_part_in_nanosec = do_div(time_in_sec, 1000000000);
 +
-+	ofs += scnprintf(txs, sizeof(txs), "%.10llu;%.9u;txs;%pM;%x;%x;%x",
-+			 time_in_sec, time_part_in_nanosec,
+ 	ofs += scnprintf(txs, sizeof(txs), "%llx;txs;%pM;%x;%x;%x",
+-			 (unsigned long long)ktime_get_boottime_ns(),
++			 (unsigned long long)ktime_get_real_fast_ns(),
  			 mi->sta->addr,
  			 info->status.ampdu_len,
  			 info->status.ampdu_ack_len,
-@@ -500,13 +514,18 @@ void __minstrel_ht_report_rate_update(st
- 	char stat[100];
- 	int ofs;
- 	int tp;
-+	u64 time_in_sec;
-+	u32 time_part_in_nanosec;
- 
+@@ -504,9 +506,10 @@ void __minstrel_ht_report_rate_update(st
  	tp = minstrel_ht_get_tp_avg(mi, MI_RATE_GROUP(rate), MI_RATE_IDX(rate),
  				    mrs->prob_avg);
  
-+	time_in_sec = ktime_get_real_fast_ns();
-+	time_part_in_nanosec = do_div(time_in_sec, 1000000000);
 +
  	ofs = scnprintf(stat, sizeof(stat),
--			"%llx;stats;%pM;%x;%x;%x;%x;%x;%x;%x\n",
+ 			"%llx;stats;%pM;%x;%x;%x;%x;%x;%x;%x\n",
 -			(unsigned long long)ktime_get_boottime_ns(),
-+			"%.10llu;%.9u;stats;%pM;%x;%x;%x;%x;%x;%x;%x\n",
-+			time_in_sec, time_part_in_nanosec,
++			(unsigned long long)ktime_get_real_fast_ns(),
  			mi->sta->addr, rate,
  			MINSTREL_TRUNC(mrs->prob_avg * 1000), tp,
  			mrs->last_success,
