@@ -1,0 +1,115 @@
+--- a/net/mac80211/rc80211_minstrel_ht.h
++++ b/net/mac80211/rc80211_minstrel_ht.h
+@@ -74,7 +74,8 @@
+ 
+ #define MINSTREL_MONITOR_STA		BIT(0)
+ #define MINSTREL_MONITOR_TXS		BIT(1)
+-#define MINSTREL_MONITOR_STATS		BIT(2)
++#define MINSTREL_MONITOR_RXS		BIT(2)
++#define MINSTREL_MONITOR_STATS		BIT(3)
+ 
+ struct minstrel_priv {
+ 	struct ieee80211_hw *hw;
+@@ -219,6 +220,9 @@ void __minstrel_ht_report_tx_status(stru
+ 				    struct minstrel_ht_sta *mi,
+ 				    struct ieee80211_tx_info *info,
+ 				    u16 *rate_list, int n_rates);
++void __minstrel_ht_report_rx_status(struct minstrel_priv *mp, u8 *addr,
++                                    int last_signal, u8 chain_status,
++                                    s8 *chain_signal);
+ void __minstrel_ht_report_rate_update(struct minstrel_priv *mp,
+ 				      struct minstrel_ht_sta *mi, u16 rate,
+ 				      struct minstrel_rate_stats *mrs);
+@@ -259,6 +263,19 @@ minstrel_ht_report_tx_status(struct mins
+ #endif
+ }
+ 
++static inline void
++minstrel_ht_report_rx_status(struct minstrel_priv *mp, u8 *addr,
++                             int last_signal, u8 chain_status, s8 *chain_signal)
++{
++#ifdef CPTCFG_MAC80211_RC_MINSTREL_DEBUGFS_API
++	if (!(mp->monitor & MINSTREL_MONITOR_RXS))
++		return;
++
++	__minstrel_ht_report_rx_status(mp, addr, last_signal,
++	                               chain_status, chain_signal);
++#endif
++}
++
+ static inline void
+ minstrel_ht_report_rate_update(struct minstrel_priv *mp,
+ 			       struct minstrel_ht_sta *mi, u16 rate,
+--- a/net/mac80211/rc80211_minstrel_ht_api.c
++++ b/net/mac80211/rc80211_minstrel_ht_api.c
+@@ -41,6 +41,10 @@ minstrel_ht_read_api_info(struct seq_fil
+ 	for (i = 0; i < IEEE80211_TX_MAX_RATES; i++)
+ 		seq_printf(s, ";rate%d,count%d", i, i);
+ 	seq_printf(s, "\n");
++	seq_printf(s, "#rxs;macaddr;last_signal");
++	for (i = 0; i < IEEE80211_MAX_CHAINS; i++)
++		seq_printf(s, ";sig_chain%d", i);
++	seq_printf(s, "\n");
+ 	seq_printf(s, "#stats;macaddr;rate;avg_prob;avg_tp;cur_success;cur_attempts;hist_success;hist_attempts\n");
+ 	seq_printf(s, "#rates;macaddr;rates;counts\n");
+ 	seq_printf(s, "#probe;macaddr;rate\n");
+@@ -150,6 +154,8 @@ minstrel_ht_api_start(struct minstrel_pr
+ 
+ 		if (!strcmp(cur, "txs"))
+ 			mask |= MINSTREL_MONITOR_TXS;
++		else if (!strcmp(cur, "rxs"))
++			mask |= MINSTREL_MONITOR_RXS;
+ 		else if (!strcmp(cur, "sta"))
+ 			mask |= MINSTREL_MONITOR_STA;
+ 		else if (!strcmp(cur, "stats"))
+@@ -495,6 +501,27 @@ void __minstrel_ht_report_tx_status(stru
+ 	relay_flush(mp->relay_ev);
+ }
+ 
++void __minstrel_ht_report_rx_status(struct minstrel_priv *mp, u8 *addr,
++				    int last_signal, u8 chain_status,
++				    s8 *chain_signal)
++{
++	char rxs[64 + IEEE80211_MAX_CHAINS * 8];
++	int ofs = 0;
++	int i;
++
++	ofs += scnprintf(rxs, sizeof(rxs), "%llx;rxs;%pM;%x",
++			 (unsigned long long)ktime_get_real_fast_ns(),
++			 addr, last_signal);
++
++	for (i = 0; i < IEEE80211_MAX_CHAINS; i++)
++	ofs += scnprintf(rxs + ofs, sizeof(rxs) - ofs, ";%x",
++			 (chain_status & BIT(i) ? chain_signal[i] : 0x7f));
++
++	ofs += scnprintf(rxs + ofs, sizeof(rxs) - ofs, "\n");
++	relay_write(mp->relay_ev, rxs, ofs);
++	relay_flush(mp->relay_ev);
++}
++
+ void __minstrel_ht_report_rate_update(struct minstrel_priv *mp,
+ 				      struct minstrel_ht_sta *mi, u16 rate,
+ 				      struct minstrel_rate_stats *mrs)
+--- a/net/mac80211/rx.c
++++ b/net/mac80211/rx.c
+@@ -31,6 +31,7 @@
+ #include "tkip.h"
+ #include "wme.h"
+ #include "rate.h"
++#include "rc80211_minstrel_ht.h"
+ 
+ static inline void ieee80211_rx_stats(struct net_device *dev, u32 len)
+ {
+@@ -1793,6 +1794,12 @@ ieee80211_rx_h_sta_process(struct ieee80
+ 		}
+ 	}
+ 
++	if (rx->local->rate_ctrl && test_sta_flag(sta, WLAN_STA_RATE_CONTROL)) {
++		minstrel_ht_report_rx_status(rx->local->rate_ctrl->priv, sta->addr,
++			(!(status->flag & RX_FLAG_NO_SIGNAL_VAL) ? status->signal : -1),
++			status->chains, status->chain_signal);
++	}
++
+ 	if (ieee80211_is_s1g_beacon(hdr->frame_control))
+ 		return RX_CONTINUE;
+ 
