@@ -8,10 +8,10 @@
 include $(TOPDIR)/rules.mk
 include $(INCLUDE_DIR)/kernel.mk
 
-PKG_VERSION:=2021.01
-PKG_RELEASE:=1
+PKG_VERSION:=2021.10
+PKG_RELEASE:=$(AUTORELEASE)
 
-PKG_HASH:=b407e1510a74e863b8b5cb42a24625344f0e0c2fc7582d8c866bd899367d0454
+PKG_HASH:=cde723e19262e646f2670d25e5ec4b1b368490de950d4e26275a988c36df0bd4
 
 include $(INCLUDE_DIR)/u-boot.mk
 include $(INCLUDE_DIR)/package.mk
@@ -52,8 +52,6 @@ UBOOT_TARGETS:= \
 	helios4 \
 	espressobin \
 	uDPU
-
-Build/Exports:=$(Host/Exports)
 
 define Build/Configure
 	# enable additional options beyond <device>_defconfig

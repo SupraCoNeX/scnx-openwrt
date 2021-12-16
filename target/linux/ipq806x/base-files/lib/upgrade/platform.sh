@@ -10,6 +10,17 @@ platform_check_image() {
 
 platform_do_upgrade() {
 	case "$(board_name)" in
+	askey,rt4230w-rev6 |\
+	compex,wpq864|\
+	netgear,d7800 |\
+	netgear,r7500 |\
+	netgear,r7500v2 |\
+	netgear,r7800 |\
+	netgear,xr500 |\
+	qcom,ipq8064-ap148 |\
+	qcom,ipq8064-ap161)
+		nand_do_upgrade "$1"
+		;;
 	asrock,g10)
 		asrock_upgrade_prepare
 		nand_do_upgrade "$1"
@@ -17,15 +28,6 @@ platform_do_upgrade() {
 	buffalo,wxr-2533dhp)
 		buffalo_upgrade_prepare_ubi
 		CI_ROOTPART="ubi_rootfs"
-		nand_do_upgrade "$1"
-		;;
-	compex,wpq864|\
-	netgear,d7800 |\
-	netgear,r7500 |\
-	netgear,r7500v2 |\
-	netgear,r7800 |\
-	qcom,ipq8064-ap148 |\
-	qcom,ipq8064-ap161)
 		nand_do_upgrade "$1"
 		;;
 	edgecore,ecw5410)
@@ -42,6 +44,11 @@ platform_do_upgrade() {
 	linksys,ea7500-v1 |\
 	linksys,ea8500)
 		platform_do_upgrade_linksys "$1"
+		;;
+	meraki,mr42 |\
+	meraki,mr52)
+		CI_KERNPART="bootkernel2"
+		nand_do_upgrade "$1"
 		;;
 	tplink,ad7200 |\
 	tplink,c2600)

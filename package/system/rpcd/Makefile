@@ -8,19 +8,18 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=rpcd
-PKG_RELEASE:=1
+PKG_RELEASE:=2
 
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL=$(PROJECT_GIT)/project/rpcd.git
-PKG_SOURCE_DATE:=2021-05-05
-PKG_SOURCE_VERSION:=7a560a1a5769146ab072f8e0165940459d3e16f7
+PKG_MIRROR_HASH:=98071b4a1ce983a0e738d7e4a2f6e52b7f6db19f99510ddef430093314134ca4
+PKG_SOURCE_DATE:=2021-11-04
+PKG_SOURCE_VERSION:=d11ffe9383ae0ec34836421926364b24c1d891ca
 PKG_MAINTAINER:=Jo-Philipp Wich <jo@mein.io>
-PKG_MIRROR_HASH:=69d9588a5a910676252eabcd2815af318806cae8316777e8b6eb00b26bdc42cb
 
 PKG_LICENSE:=ISC
 PKG_LICENSE_FILES:=
 
-PKG_BUILD_PARALLEL:=1
 PKG_ASLR_PIE_REGULAR:=1
 
 include $(INCLUDE_DIR)/package.mk
@@ -83,6 +82,11 @@ define BuildPlugin
 
   define Package/rpcd-mod-$(1)/description
     $(3)
+  endef
+
+  define Package/rpcd-mod-$(1)/postinst
+#!/bin/sh
+[ -n "$$$${IPKG_INSTROOT}" ] || /etc/init.d/rpcd reload
   endef
 
   define Package/rpcd-mod-$(1)/install

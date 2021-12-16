@@ -298,7 +298,7 @@ $(eval $(call KernelPackage,drm-amdgpu))
 define KernelPackage/drm-imx
   SUBMENU:=$(VIDEO_MENU)
   TITLE:=Freescale i.MX DRM support
-  DEPENDS:=@TARGET_imx6 +kmod-drm-kms-helper
+  DEPENDS:=@TARGET_imx +kmod-drm-kms-helper
   KCONFIG:=CONFIG_DRM_IMX \
 	CONFIG_DRM_FBDEV_EMULATION=y \
 	CONFIG_DRM_FBDEV_OVERALLOC=100 \
@@ -854,6 +854,21 @@ define KernelPackage/video-gspca-sq905c/description
 endef
 
 $(eval $(call KernelPackage,video-gspca-sq905c))
+
+
+define KernelPackage/video-gspca-sq930x
+  TITLE:=sq930x webcam support
+  KCONFIG:=CONFIG_USB_GSPCA_SQ930X
+  FILES:=$(LINUX_DIR)/drivers/media/$(V4L2_USB_DIR)/gspca/gspca_sq930x.ko
+  AUTOLOAD:=$(call AutoProbe,gspca_sq930x)
+  $(call AddDepends/camera-gspca)
+endef
+
+define KernelPackage/video-gspca-sq930x/description
+ The SQ Technologies SQ930X based USB Camera Driver (sq930x) kernel module
+endef
+
+$(eval $(call KernelPackage,video-gspca-sq930x))
 
 
 define KernelPackage/video-gspca-stk014

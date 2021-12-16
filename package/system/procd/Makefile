@@ -12,9 +12,9 @@ PKG_RELEASE:=$(AUTORELEASE)
 
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL=$(PROJECT_GIT)/project/procd.git
-PKG_SOURCE_DATE:=2021-05-05
-PKG_SOURCE_VERSION:=021ece84de430fca988acd6934f6046ea59d8c37
-PKG_MIRROR_HASH:=edbe464cadbae000f4a48a6f1e6a0f5d27ae3ad521e308205252ad89639b6f9d
+PKG_MIRROR_HASH:=e2c60679cc39549e01c2c8e64eeb78278edb92953ce24e74b73da9ac0f21fe3d
+PKG_SOURCE_DATE:=2021-12-11
+PKG_SOURCE_VERSION:=bb95fe8df7115ab57792369c768927eafc042161
 CMAKE_INSTALL:=1
 
 PKG_LICENSE:=GPL-2.0
@@ -68,7 +68,7 @@ define Package/procd-ujail
   SECTION:=base
   CATEGORY:=Base system
   DEPENDS:=@KERNEL_NAMESPACES +@KERNEL_UTS_NS +@KERNEL_IPC_NS +@KERNEL_PID_NS \
-	  +libubox +libubus +libblobmsg-json
+	  +libubox +libubus +libuci +libblobmsg-json
   TITLE:=OpenWrt process jail helper
 endef
 
@@ -82,15 +82,14 @@ endef
 define Package/procd-seccomp
   SECTION:=base
   CATEGORY:=Base system
-  DEPENDS:=@(aarch64||arm||armeb||mips||mipsel||i386||powerpc||x86_64) @!TARGET_uml \
-	  @KERNEL_SECCOMP +libubox +libblobmsg-json
+  DEPENDS:=@SECCOMP +libubox +libblobmsg-json
   TITLE:=OpenWrt process seccomp helper + utrace
 endef
 
 define Package/uxc
   SECTION:=base
   CATEGORY:=Base system
-  DEPENDS:=+procd-ujail +libubus +libubox +libblobmsg-json
+  DEPENDS:=+procd-ujail +libubus +libubox +libblobmsg-json +blockd +PACKAGE_uxc:rpcd
   TITLE:=OpenWrt container management
   MAINTAINER:=Daniel Golle <daniel@makrotopia.org>
 endef

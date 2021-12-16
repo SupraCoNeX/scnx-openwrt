@@ -175,6 +175,22 @@
 	reset-gpio = <&qcom_pinmux 3 GPIO_ACTIVE_HIGH>;
 	pinctrl-0 = <&pcie0_pins>;
 	pinctrl-names = "default";
+
+	bridge@0,0 {
+		reg = <0x00000000 0 0 0 0>;
+		#address-cells = <3>;
+		#size-cells = <2>;
+		ranges;
+
+		wifi@1,0 {
+			compatible = "pci168c,0040";
+			reg = <0x00010000 0 0 0 0>;
+
+			nvmem-cells = <&macaddr_art_6>;
+			nvmem-cell-names = "mac-address";
+			mac-address-increment = <(1)>;
+		};
+	};
 };
 
 &pcie1 {
@@ -183,6 +199,22 @@
 	pinctrl-0 = <&pcie1_pins>;
 	pinctrl-names = "default";
 	max-link-speed = <1>;
+
+	bridge@0,0 {
+		reg = <0x00000000 0 0 0 0>;
+		#address-cells = <3>;
+		#size-cells = <2>;
+		ranges;
+
+		wifi@1,0 {
+			compatible = "pci168c,0040";
+			reg = <0x00010000 0 0 0 0>;
+
+			nvmem-cells = <&macaddr_art_6>;
+			nvmem-cell-names = "mac-address";
+			mac-address-increment = <(2)>;
+		};
+	};
 };
 
 &nand_controller {
@@ -297,7 +329,8 @@
 	pinctrl-0 = <&rgmii2_pins>;
 	pinctrl-names = "default";
 
-	mtd-mac-address = <&art 6>;
+	nvmem-cells = <&macaddr_art_6>;
+	nvmem-cell-names = "mac-address";
 
 	fixed-link {
 		speed = <1000>;
@@ -310,7 +343,8 @@
 	phy-mode = "sgmii";
 	qcom,id = <2>;
 
-	mtd-mac-address = <&art 0>;
+	nvmem-cells = <&macaddr_art_0>;
+	nvmem-cell-names = "mac-address";
 
 	fixed-link {
 		speed = <1000>;
@@ -320,4 +354,18 @@
 
 &adm_dma {
 	status = "okay";
+};
+
+&art {
+	compatible = "nvmem-cells";
+	#address-cells = <1>;
+	#size-cells = <1>;
+
+	macaddr_art_0: macaddr@0 {
+		reg = <0x0 0x6>;
+	};
+
+	macaddr_art_6: macaddr@6 {
+		reg = <0x6 0x6>;
+	};
 };

@@ -89,6 +89,16 @@ define Build/mkdlinkfw-factory
 	mv $@.new $@
 endef
 
+define Build/mkdlinkfw-loader
+	-$(STAGING_DIR_HOST)/bin/mkdlinkfw \
+		-k $(KDIR)/loader-$(DEVICE_NAME).bin \
+		-r $@ \
+		-o $@.new \
+		$(if $(DLINK_IMAGE_OFFSET), -O $(DLINK_IMAGE_OFFSET)) \
+		-s $(DLINK_FIRMWARE_SIZE)
+	mv $@.new $@
+endef
+
 define Build/netis-tail
 	echo -n $(1) >> $@
 	echo -n $(UIMAGE_NAME)-yun | $(MKHASH) md5 | \
@@ -144,6 +154,12 @@ define Build/uimage-padhdr
 	mv $@.new $@
 endef
 
+define Build/uimage-sgehdr
+	uimage_sgehdr -i $@ -o $@.new -m $(DEVICE_MODEL) \
+		-h $(DEVICE_VARIANT) -s V1.00000
+	mv $@.new $@
+endef
+
 define Build/umedia-header
 	fix-u-media-header -T 0x46 -B $(1) -i $@ -o $@.new && mv $@.new $@
 endef
@@ -166,7 +182,7 @@ define Device/Default
   IMAGES := sysupgrade.bin
   COMPILE :=
   sysupgrade_bin := append-kernel | append-rootfs | pad-rootfs
-  IMAGE/sysupgrade.bin := append-kernel | append-rootfs | pad-rootfs | append-metadata | check-size
+  IMAGE/sysupgrade.bin := append-kernel | append-rootfs | pad-rootfs | check-size | append-metadata
 endef
 
 define Device/netgear_sercomm_nor
@@ -175,13 +191,14 @@ define Device/netgear_sercomm_nor
   IMAGES += factory.img
   IMAGE/default := append-kernel | pad-to $$$$(BLOCKSIZE) | append-rootfs | \
 	pad-rootfs
-  IMAGE/sysupgrade.bin := $$(IMAGE/default) | append-metadata | check-size
+  IMAGE/sysupgrade.bin := $$(IMAGE/default) | check-size | append-metadata
   IMAGE/factory.img := pad-extra $$$$(SERCOMM_PAD) | $$(IMAGE/default) | \
 	pad-to $$$$(BLOCKSIZE) | sercom-footer | pad-to 128 | \
 	zip $$$$(SERCOMM_HWNAME).bin | sercom-seal
 endef
 
 define Device/seama
+  BLOCKSIZE := 64k
   SEAMA_MTDBLOCK := 2
   IMAGES += factory.bin
 
@@ -190,7 +207,7 @@ define Device/seama
   # - 36 bytes of META data (4-bytes aligned)
   IMAGE/default := append-kernel | pad-offset $$$$(BLOCKSIZE) 64 | append-rootfs
   IMAGE/sysupgrade.bin := \
-	$$(IMAGE/default) | seama | pad-rootfs | append-metadata | check-size
+	$$(IMAGE/default) | seama | pad-rootfs | check-size | append-metadata
   IMAGE/factory.bin := \
 	$$(IMAGE/default) | pad-rootfs -x 64 | seama | seama-seal | check-size
   SEAMA_SIGNATURE :=

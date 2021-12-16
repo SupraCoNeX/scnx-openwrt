@@ -166,7 +166,7 @@ void rcd_phy_init_client(struct client *cl)
 
 void rcd_phy_dump(struct client *cl, struct phy *phy)
 {
-	char buf[128];
+	char buf[512];
 	FILE *f;
 
 	f = fopen(phy_file_path(phy, "api_info"), "r");
@@ -182,7 +182,7 @@ void rcd_phy_dump(struct client *cl, struct phy *phy)
 #ifdef CONFIG_MQTT
 void mqtt_phy_dump(struct phy *phy, int (*cb)(void*, char*), void *cb_arg)
 {
-	char buf[128];
+	char buf[512];
 	FILE *f;
 
 	f = fopen(phy_file_path(phy, "api_info"), "r");
