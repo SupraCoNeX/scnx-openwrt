@@ -1,0 +1,59 @@
+--- a/net/mac80211/rc80211_minstrel_ht_api.c
++++ b/net/mac80211/rc80211_minstrel_ht_api.c
+@@ -119,6 +119,7 @@ minstrel_ht_dump_sta(struct minstrel_pri
+ 				 mi->supported[i]);
+ 
+ 	ofs += scnprintf(info + ofs, sizeof(info) - ofs, "\n");
++
+ 	relay_write(mp->relay_ev, info, ofs);
+ 	relay_flush(mp->relay_ev);
+ }
+@@ -460,6 +461,7 @@ void minstrel_ht_sta_remove(struct minst
+ 	ofs = scnprintf(info, sizeof(info), "%llx;sta;remove;%pM;;;\n",
+ 			(unsigned long long)ktime_get_real_fast_ns(),
+ 			mi->sta->addr);
++
+ 	relay_write(mp->relay_ev, info, ofs);
+ 	relay_flush(mp->relay_ev);
+ 
+@@ -497,8 +499,13 @@ void __minstrel_ht_report_tx_status(stru
+ 		ofs += scnprintf(txs + ofs, sizeof(txs) - ofs, ";ffff,0");
+ 
+ 	ofs += scnprintf(txs + ofs, sizeof(txs) - ofs, "\n");
++
++	spin_lock_bh(&mp->lock);
++
+ 	relay_write(mp->relay_ev, txs, ofs);
+ 	relay_flush(mp->relay_ev);
++
++	spin_unlock_bh(&mp->lock);
+ }
+ 
+ void __minstrel_ht_report_rx_status(struct minstrel_priv *mp, u8 *addr,
+@@ -518,8 +525,13 @@ void __minstrel_ht_report_rx_status(stru
+ 			 (chain_status & BIT(i) ? chain_signal[i] : 0x7f));
+ 
+ 	ofs += scnprintf(rxs + ofs, sizeof(rxs) - ofs, "\n");
++
++	spin_lock_bh(&mp->lock);
++
+ 	relay_write(mp->relay_ev, rxs, ofs);
+ 	relay_flush(mp->relay_ev);
++
++	spin_unlock_bh(&mp->lock);
+ }
+ 
+ void __minstrel_ht_report_rate_update(struct minstrel_priv *mp,
+@@ -543,8 +555,12 @@ void __minstrel_ht_report_rate_update(st
+ 			mrs->last_attempts,
+ 			mrs->succ_hist, mrs->att_hist);
+ 
++	spin_lock_bh(&mp->lock);
++
+ 	relay_write(mp->relay_ev, stat, ofs);
+ 	relay_flush(mp->relay_ev);
++
++	spin_unlock_bh(&mp->lock);
+ }
+ 
+ void minstrel_ht_add_debugfs_api(struct ieee80211_hw *hw, void *priv,
