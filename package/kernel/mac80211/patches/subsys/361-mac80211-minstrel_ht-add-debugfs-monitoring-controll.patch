@@ -12,7 +12,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
 
 --- a/local-symbols
 +++ b/local-symbols
-@@ -49,6 +49,7 @@ LIB80211_DEBUG=
+@@ -41,6 +41,7 @@ LIB80211_DEBUG=
  MAC80211=
  MAC80211_HAS_RC=
  MAC80211_RC_MINSTREL=
@@ -22,7 +22,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  MAC80211_MESH=
 --- a/net/mac80211/Kconfig
 +++ b/net/mac80211/Kconfig
-@@ -26,6 +26,15 @@ config MAC80211_RC_MINSTREL
+@@ -29,6 +29,15 @@ config MAC80211_RC_MINSTREL
  	help
  	  This option enables the 'minstrel' TX rate control algorithm
  
@@ -40,7 +40,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  	depends on MAC80211_HAS_RC
 --- a/net/mac80211/Makefile
 +++ b/net/mac80211/Makefile
-@@ -60,6 +60,9 @@ rc80211_minstrel-y := \
+@@ -61,6 +61,9 @@ rc80211_minstrel-y := \
  rc80211_minstrel-$(CPTCFG_MAC80211_DEBUGFS) += \
  	rc80211_minstrel_ht_debugfs.o
  
@@ -79,7 +79,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  	return &mi->groups[group].rates[idx];
  }
  
-@@ -1024,6 +1026,8 @@ minstrel_ht_update_stats(struct minstrel
+@@ -1020,6 +1022,8 @@ minstrel_ht_update_stats(struct minstrel
  			tp_rate = tmp_legacy_tp_rate;
  
  		for (i = MCS_GROUP_RATES - 1; i >= 0; i--) {
@@ -88,7 +88,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  			if (!(mi->supported[group] & BIT(i)))
  				continue;
  
-@@ -1031,7 +1035,11 @@ minstrel_ht_update_stats(struct minstrel
+@@ -1027,7 +1031,11 @@ minstrel_ht_update_stats(struct minstrel
  
  			mrs = &mg->rates[i];
  			mrs->retry_updated = false;
@@ -100,7 +100,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  
  			if (mrs->att_hist)
  				last_prob = max(last_prob, mrs->prob_avg);
-@@ -1080,7 +1088,8 @@ minstrel_ht_update_stats(struct minstrel
+@@ -1076,7 +1084,8 @@ minstrel_ht_update_stats(struct minstrel
  
  	mi->max_prob_rate = tmp_max_prob_rate;
  
@@ -110,15 +110,15 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  
  #ifdef CPTCFG_MAC80211_DEBUGFS
  	/* use fixed index if set */
-@@ -1177,6 +1186,7 @@ minstrel_ht_tx_status(void *priv, struct
+@@ -1150,6 +1159,7 @@ minstrel_ht_tx_status(void *priv, struct
  	struct minstrel_priv *mp = priv;
  	u32 update_interval = mp->update_interval;
  	bool last, update = false;
 +	u16 rate_list[IEEE80211_TX_MAX_RATES] = {};
  	int i;
  
- 	/* This packet was aggregated but doesn't carry status info */
-@@ -1208,13 +1218,15 @@ minstrel_ht_tx_status(void *priv, struct
+ 	/* Ignore packet that was sent with noAck flag */
+@@ -1185,13 +1195,15 @@ minstrel_ht_tx_status(void *priv, struct
  		last = (i == IEEE80211_TX_MAX_RATES - 1) ||
  		       !minstrel_ht_txstat_valid(mp, mi, &ar[i + 1]);
  
@@ -135,7 +135,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  	if (mp->hw->max_rates > 1) {
  		/*
  		 * check for sudden death of spatial multiplexing,
-@@ -1236,7 +1248,7 @@ minstrel_ht_tx_status(void *priv, struct
+@@ -1213,7 +1225,7 @@ minstrel_ht_tx_status(void *priv, struct
  	}
  
  	if (update)
@@ -144,7 +144,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  }
  
  static void
-@@ -1299,7 +1311,7 @@ minstrel_calc_retransmit(struct minstrel
+@@ -1276,7 +1288,7 @@ minstrel_calc_retransmit(struct minstrel
  }
  
  
@@ -153,7 +153,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  minstrel_ht_set_rate(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
                       struct ieee80211_sta_rates *ratetbl, int offset, int index)
  {
-@@ -1408,11 +1420,15 @@ minstrel_ht_get_max_amsdu_len(struct min
+@@ -1385,11 +1397,15 @@ minstrel_ht_get_max_amsdu_len(struct min
  }
  
  static void
@@ -170,7 +170,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  	rates = kzalloc(sizeof(*rates), GFP_ATOMIC);
  	if (!rates)
  		return;
-@@ -1439,7 +1455,7 @@ minstrel_ht_get_sample_rate(struct minst
+@@ -1416,7 +1432,7 @@ minstrel_ht_get_sample_rate(struct minst
  {
  	u8 seq;
  
@@ -179,7 +179,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  		seq = mi->sample_seq;
  		mi->sample_seq = (seq + 1) % ARRAY_SIZE(minstrel_sample_seq);
  		seq = minstrel_sample_seq[seq];
-@@ -1689,7 +1705,9 @@ minstrel_ht_update_caps(void *priv, stru
+@@ -1662,7 +1678,9 @@ minstrel_ht_update_caps(void *priv, stru
  
  	/* create an initial rate table with the lowest supported rates */
  	minstrel_ht_update_stats(mp, mi);
@@ -190,7 +190,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  }
  
  static void
-@@ -1725,12 +1743,18 @@ minstrel_ht_alloc_sta(void *priv, struct
+@@ -1698,12 +1716,18 @@ minstrel_ht_alloc_sta(void *priv, struct
  			max_rates = sband->n_bitrates;
  	}
  
@@ -210,7 +210,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  	kfree(priv_sta);
  }
  
-@@ -1841,12 +1865,14 @@ static void minstrel_ht_add_debugfs(stru
+@@ -1814,12 +1838,14 @@ static void minstrel_ht_add_debugfs(stru
  	mp->fixed_rate_idx = (u32) -1;
  	debugfs_create_u32("fixed_rate_idx", S_IRUGO | S_IWUGO, debugfsdir,
  			   &mp->fixed_rate_idx);
