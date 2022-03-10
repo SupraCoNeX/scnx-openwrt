@@ -259,33 +259,6 @@ mqtt_set_phy_state(struct mqtt_context *ctx, struct phy *phy, bool add)
 }
 
 static void
-mqtt_ctl_subscribe(struct mqtt_context *ctx)
-{
-	static char all_nodes[128];
-	static char this_node[128];
-	static char *const topics[2] = {all_nodes, this_node};
-	int err;
-
-	err = snprintf(all_nodes, 128, "%sctl/all", ctx->topic_prefix);
-	if (err >= 128)
-		goto too_long;
-
-	err = snprintf(this_node, 128, "%sctl/%s", ctx->topic_prefix, ctx->id);
-	if (err >= 128)
-		goto too_long;
-
-	err = mosquitto_subscribe_multiple(ctx->mosq, NULL, 2, topics, 1,
-									   MQTT_SUB_OPT_SEND_RETAIN_NEVER, NULL);
-	if (err)
-		fprintf(stderr, "Failed to subscribe to control topics: %s\n", mosquitto_strerror(err));
-
-	return;
-
-too_long:
-	fprintf(stderr, "Failed to subscribe to control topics: topic too long\n");
-}
-
-static void
 on_connect(struct mosquitto *mosq, void *arg, int rc, int flags, const mosquitto_property *prop)
 {
 	enum {
@@ -312,8 +285,6 @@ on_connect(struct mosquitto *mosq, void *arg, int rc, int flags, const mosquitto
 
 	vlist_for_each_element(&phy_list, phy, node)
 		mqtt_set_phy_state(ctx, phy, true);
-
-	mqtt_ctl_subscribe(ctx);
 }
 
 static void
@@ -330,17 +301,6 @@ on_disconnect(struct mosquitto *mosq, void *arg, int reason, const mosquitto_pro
 	list_add_tail(&ctx->list, &pending);
 	if (!others_pending)
 		uloop_timeout_set(&restart_timer, 100);
-}
-
-static void
-on_message(struct mosquitto *mosq, void *arg, const struct mosquitto_message *msg,
-		   const mosquitto_property *prop)
-{
-	char buf[msg->payloadlen + 1];
-	strncpy(buf, (char*) msg->payload, msg->payloadlen);
-	buf[msg->payloadlen] = '\0';
-
-	rcd_phy_control(NULL, buf);
 }
 
 static void
@@ -370,7 +330,6 @@ mqtt_connect_pending(struct uloop_timeout *timeout)
 				exit(errno);
 			}
 			mosquitto_connect_v5_callback_set(ctx->mosq, on_connect);
-			mosquitto_message_v5_callback_set(ctx->mosq, on_message);
 			mosquitto_disconnect_v5_callback_set(ctx->mosq, on_disconnect);
 		} else {
 			reconnect = true;
