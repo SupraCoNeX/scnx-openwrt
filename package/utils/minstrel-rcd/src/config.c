@@ -8,6 +8,7 @@ static struct uci_package *config = NULL;
 #ifdef CONFIG_MQTT
 const char *global_id = NULL;
 const char *global_topic = NULL;
+const char *capath = "/etc/ssl/certs/";
 #endif
 
 static struct uci_package*
@@ -39,10 +40,14 @@ config_init_package(const char *config)
 static void
 config_init_globals(void)
 {
+	const char *tmp;
 	struct uci_section *globals = uci_lookup_section(uci_ctx, config, "rcd");
 	if (globals) {
 		global_id = uci_lookup_option_string(uci_ctx, globals, "id");
 		global_topic = uci_lookup_option_string(uci_ctx, globals, "topic");
+		tmp = uci_lookup_option_string(uci_ctx, globals, "capath");
+		if (tmp)
+			capath = tmp;
 	}
 }
 
@@ -62,14 +67,15 @@ config_parse_mqtt_broker(struct uci_section *s)
 	id = uci_lookup_option_string(uci_ctx, s, "id");
 	if (!id)
 		id = global_id;
-
-	bind_addr = uci_lookup_option_string(uci_ctx, s, "bindaddr");
-	topic = uci_lookup_option_string(uci_ctx, s, "topic");
-
 	if (!id)
 		return;
 
-	mqtt_broker_add(addr, port, bind_addr, id, topic);
+	bind_addr = uci_lookup_option_string(uci_ctx, s, "bindaddr");
+	topic = uci_lookup_option_string(uci_ctx, s, "topic");
+	if (!topic)
+		topic = global_topic;
+
+	mqtt_broker_add(addr, port, bind_addr, id, topic, capath);
 }
 
 static void

@@ -90,8 +90,9 @@ void rcd_phy_control(struct client *cl, char *data);
 void rcd_config_init(void);
 void mqtt_init(void);
 void mqtt_broker_add(const char *addr, int port, const char *bind, const char *id,
-					 const char *prefix);
-void mqtt_broker_add_cli(const char *addr, const char *bind, const char *id, const char *prefix);
+                     const char *prefix, const char *capath);
+void mqtt_broker_add_cli(const char *addr, const char *bind, const char *id, const char *prefix,
+                         const char *capath);
 int mqtt_publish_event(const struct phy *phy, const char *str);
 void mqtt_stop(void);
 

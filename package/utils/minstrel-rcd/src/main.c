@@ -55,6 +55,7 @@ int main(int argc, char **argv)
 	const char *bind_addr = NULL;
 	const char *mqtt_id = NULL;
 	const char *topic = NULL;
+	const char *capath = "/etc/ssl/certs/";
 #endif
 
 	uloop_init();
@@ -63,7 +64,7 @@ int main(int argc, char **argv)
 	rcd_config_init();
 #endif
 
-	while ((ch = getopt(argc, argv, "h:i:b:t:")) != -1) {
+	while ((ch = getopt(argc, argv, "h:i:C:b:t:")) != -1) {
 		switch (ch) {
 		case 'h':
 			rcd_server_add(optarg);
@@ -73,11 +74,14 @@ int main(int argc, char **argv)
 		case 'i':
 			mqtt_id = optarg;
 			break;
+		case 'C':
+			capath = optarg;
+			break;
 		case 't':
 			topic = optarg;
 			break;
 		case 'b':
-			mqtt_broker_add_cli(optarg, bind_addr, mqtt_id, topic);
+			mqtt_broker_add_cli(optarg, bind_addr, mqtt_id, topic, capath);
 #endif
 			break;
 		default:

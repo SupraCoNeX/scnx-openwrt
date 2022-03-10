@@ -13,8 +13,8 @@ PKG_RELEASE:=1
 PKG_BUILD_DIR := $(BUILD_DIR)/$(PKG_NAME)-$(PKG_RELEASE)
 
 PKG_CONFIG_DEPENDS:= \
-	CONFIG_MINSTREL_RCD_MQTT_SSL \
-	CONFIG_MINSTREL_RCD_MQTT_NOSSL
+	CONFIG_MINSTREL_RCD_NO_MQTT \
+	CONFIG_MINSTREL_RCD_MQTT
 
 include $(INCLUDE_DIR)/package.mk
 include $(INCLUDE_DIR)/cmake.mk
@@ -23,7 +23,7 @@ define Package/minstrel-rcd
   SECTION:=utils
   CATEGORY:=Utilities
   TITLE:=Control daemon for mac80211 minstrel rate control
-  DEPENDS:=+libubox +libuci +MINSTREL_RCD_MQTT_NOSSL:libmosquitto-nossl +MINSTREL_RCD_MQTT_SSL:libmosquitto-ssl
+  DEPENDS:=+libubox +libuci +MINSTREL_RCD_MQTT:libmosquitto-ssl
   MAINTAINER:=Felix Fietkau <nbd@nbd.name>
 endef
 
@@ -39,33 +39,23 @@ endef
 define Package/minstrel-rcd/config
 choice
 	prompt "mqtt support"
-	default MINSTREL_RCD_NONE
+	default MINSTREL_RCD_NO_MQTT
 
-	config MINSTREL_RCD_NONE
-		bool "None"
+	config MINSTREL_RCD_NO_MQTT
+		bool "No"
 
-	config MINSTREL_RCD_MQTT_SSL
-		bool "with SSL"
-
-	config MINSTREL_RCD_MQTT_NOSSL
-		bool "without SSL"
+	config MINSTREL_RCD_MQTT
+		bool "Yes"
 endchoice
 endef
 
-ifeq ($(CONFIG_MINSTREL_RCD_NONE),y)
+ifeq ($(CONFIG_MINSTREL_RCD_NO_MQTT),y)
 	CONFFILE:=minstrel-rcd.config
 endif
 
-ifeq ($(CONFIG_MINSTREL_RCD_MQTT_NOSSL),y)
-	CONFFILE:=minstrel-rcd-mqtt-nossl.config
-	TARGET_CFLAGS += -DCONFIG_MQTT
-	CMAKE_OPTIONS:="-DCONFIG_MQTT=1"
-endif
-
-ifeq ($(CONFIG_MINSTREL_RCD_MQTT_SSL),y)
-	CONFFILE:=minstrel-rcd-mqtt-ssl.config
-	TARGET_CFLAGS += -DCONFIG_MQTT
-	CMAKE_OPTIONS:="-DCONFIG_MQTT=1"
+ifeq ($(CONFIG_MINSTREL_RCD_MQTT),y)
+	CONFFILE:=minstrel-rcd-mqtt.config
+	CMAKE_OPTIONS += -DCONFIG_MQTT=1
 endif
 
 define Package/minstrel-rcd/install
