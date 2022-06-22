@@ -199,36 +199,49 @@ phy_dump_cb(void *arg, char *buf)
 	if (newline)
 		*newline = '\0';
 
-	if (*buf == '#') {
-		buf++;
-		return mqtt_publish_api(ctx, buf, sep, strlen(sep), NULL);
-	}
+	if (*buf == '#')
+		return mqtt_publish_api(ctx, ++buf, sep, strlen(sep), NULL);
 
 	return mqtt_publish(ctx, buf, sep, strlen(sep), false, true, 1, NULL);
+}
+
+static char*
+get_topic(const char *buf, struct phy *phy)
+{
+	static char topic[64];
+
+	char *topic_start, *cur;
+	size_t tlen;
+
+	memset(topic, 0, 64);
+	cur = strchr(buf, ';');
+	if (!cur)
+		goto error;
+
+	topic_start = ++cur;
+	cur = strchr(topic_start, ';');
+	if (!cur)
+		goto error;
+
+	tlen = MIN(63, strlen(phy_name(phy)) + 1 + (cur - topic_start));
+	snprintf(topic, tlen, "%s/%s", phy_name(phy), topic_start);
+
+	return topic;
+
+error:
+	return NULL;
 }
 
 void
 mqtt_phy_event(struct phy *phy, const char *str)
 {
-	static char topic[64];
-
-	char *topic_start, *cur;
+	char *topic;
 	struct mqtt_context *ctx;
-	size_t topic_len;
 
 	list_for_each_entry(ctx, &brokers, list) {
-		memset(topic, 0, 16);
-		cur = strchr(str, ';');
-		if (!cur)
-			return;
-
-		topic_start = ++cur;
-		cur = strchr(topic_start, ';');
-		if (!cur)
-			return;
-
-		topic_len = MIN(63, strlen(phy_name(phy)) + 2 + (cur - topic_start));
-		snprintf(topic, topic_len, "%s/%s", phy_name(phy), topic_start);
+		topic = get_topic(str, phy);
+		if (!topic)
+			continue;
 
 		mqtt_publish(ctx, topic, str, strlen(str), false, false, 0, NULL);
 	}

@@ -3,6 +3,17 @@
 #include "rcd.h"
 
 static LIST_HEAD(clients);
+#ifdef CONFIG_ZSTD
+static LIST_HEAD(zclients);
+#endif
+
+void rcd_client_phy_event(struct phy *phy, const char *str)
+{
+	struct client *cl;
+
+	list_for_each_entry(cl, &clients, list)
+		client_phy_printf(cl, phy, "%s\n", str);
+}
 
 void rcd_client_set_phy_state(struct client *cl, struct phy *phy, bool add)
 {
@@ -18,14 +29,6 @@ void rcd_client_set_phy_state(struct client *cl, struct phy *phy, bool add)
 	}
 
 	client_phy_printf(cl, phy, "0;%s\n", add ? "add" : "remove");
-}
-
-void rcd_client_phy_event(struct phy *phy, const char *str)
-{
-	struct client *cl;
-
-	list_for_each_entry(cl, &clients, list)
-		client_phy_printf(cl, phy, "%s\n", str);
 }
 
 static void
@@ -103,3 +106,70 @@ void rcd_client_accept(int fd)
 	list_add_tail(&cl->list, &clients);
 	client_start(cl);
 }
+
+bool
+rcd_has_clients(bool compressed)
+{
+	return compressed ? !list_empty(&zclients) : !list_empty(&clients);
+}
+
+#ifdef CONFIG_ZSTD
+static void
+zclient_start(struct client *cl)
+{
+	struct phy *phy;
+
+	vlist_for_each_element(&phy_list, phy, node)
+		rcd_zclient_set_phy_state(cl, phy, true);
+}
+
+void rcd_zclient_accept(int fd)
+{
+	struct ustream *us;
+	struct client *cl;
+
+	cl = calloc(1, sizeof(*cl));
+	us = &cl->sfd.stream;
+	us->notify_read = client_notify_read;
+	us->notify_state = client_notify_state;
+	us->string_data = true;
+	ustream_fd_init(&cl->sfd, fd);
+	list_add_tail(&cl->list, &zclients);
+	zclient_start(cl);
+}
+
+void rcd_zclient_set_phy_state(struct client *cl, struct phy *phy, bool add)
+{
+	char str[16];
+	char buf[128]; // worst-case compress bound for 16 bytes is 79
+	size_t clen;
+	int error;
+
+	if (!cl) {
+		list_for_each_entry(cl, &zclients, list)
+			rcd_zclient_set_phy_state(cl, phy, add);
+		return;
+	}
+
+	if (add && !cl->init_done) {
+		rcd_phy_dump_zstd(cl, phy);
+		cl->init_done = true;
+	}
+
+	snprintf(str, sizeof(str), "%s;0;%s\n", phy_name(phy), add ? "add" : "remove");
+
+	error = zstd_compress_into(&buf, sizeof(buf), str, strlen(str), &clen);
+	if (error)
+		return;
+
+	client_write(cl, buf, clen);
+}
+
+void rcd_zclient_write(const void *buf, size_t len)
+{
+	struct client *cl;
+
+	list_for_each_entry(cl, &zclients, list)
+		client_write(cl, buf, len);
+}
+#endif

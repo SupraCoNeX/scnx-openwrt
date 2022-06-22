@@ -45,17 +45,65 @@ server_cb(struct uloop_fd *fd, unsigned int events)
 	}
 }
 
-static void server_start(struct server *s)
+#ifdef CONFIG_ZSTD
+static void
+zstd_server_cb(struct uloop_fd *fd, unsigned int events)
 {
-	s->fd.fd = usock(USOCK_SERVER | USOCK_NONBLOCK | USOCK_TCP, s->addr, usock_port(RCD_PORT));
-	if (s->fd.fd < 0) {
+	struct server *s = container_of(fd, struct server, zfd);
+	struct sockaddr_in6 addr;
+	unsigned int sl;
+	int cfd;
+
+	while (1) {
+		sl = sizeof(addr);
+		cfd = accept(fd->fd, (struct sockaddr *)&addr, &sl);
+
+		if (cfd < 0) {
+			if (errno == EAGAIN)
+				return;
+
+			if (errno == EINTR)
+				continue;
+
+			/* other error, restart */
+			uloop_fd_delete(fd);
+			close(fd->fd);
+			list_move_tail(&s->list, &pending);
+			uloop_timeout_set(&restart_timer, 1000);
+		}
+
+		rcd_zclient_accept(cfd);
+	}
+}
+#endif
+
+static int
+server_fd_init(struct uloop_fd *fd, const char *addr, int port, uloop_fd_handler cb)
+{
+	fd->fd = usock(USOCK_SERVER | USOCK_NONBLOCK | USOCK_TCP, addr, usock_port(port));
+	if (fd->fd < 0) {
 		if (in_init)
-			fprintf(stderr, "WARNING: Failed to open server port on %s\n", s->addr);
-		return;
+			fprintf(stderr, "WARNING: Failed to open server port %d on %s\n", port, addr);
+		return -1;
 	}
 
-	s->fd.cb = server_cb;
-	uloop_fd_add(&s->fd, ULOOP_READ);
+	fd->cb = cb;
+	uloop_fd_add(fd, ULOOP_READ);
+
+	return 0;
+}
+
+static void server_start(struct server *s)
+{
+	int err = 0;
+
+	err += server_fd_init(&s->fd, s->addr, RCD_PORT, server_cb);
+#ifdef CONFIG_ZSTD
+	err += server_fd_init(&s->zfd, s->addr, RCD_PORT + 1, zstd_server_cb);
+#endif
+	if (err)
+		return;
+
 	list_move_tail(&s->list, &servers);
 }
 

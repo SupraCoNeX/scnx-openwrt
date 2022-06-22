@@ -91,6 +91,42 @@ config_init_mqtt(void)
 }
 #endif
 
+#ifdef CONFIG_ZSTD
+static void
+config_parse_zstd(struct uci_section *s, struct zstd_opts *o)
+{
+	const char *tmp;
+
+	o->dict = uci_lookup_option_string(uci_ctx, s, "dict");
+
+	tmp = uci_lookup_option_string(uci_ctx, s, "compression_level");
+	if (tmp)
+		o->comp_level = atoi(tmp);
+
+	tmp = uci_lookup_option_string(uci_ctx, s, "buffer_size");
+	if (tmp)
+		o->bufsize = atoi(tmp);
+
+	tmp = uci_lookup_option_string(uci_ctx, s, "timeout_ms");
+	if (tmp)
+		o->timeout_ms = atoi(tmp);
+}
+
+void
+config_init_zstd(struct zstd_opts *o)
+{
+	struct uci_element *e;
+	uci_foreach_element(&config->sections, e) {
+		struct uci_section *s = uci_to_section(e);
+
+		if (strcmp(s->type, "zstd") == 0) {
+			config_parse_zstd(s, o);
+			break;
+		}
+	}
+}
+#endif
+
 void
 rcd_config_init(void)
 {

@@ -11,23 +11,48 @@ usage(void)
 {
 	fprintf(stderr, "usage: minstrel-rcd [-h INTERFACE]");
 #ifdef CONFIG_MQTT
-	fprintf(stderr, " [-i ID] [-t TOPIC_PREFIX] [-b BROKER]\n"
-					"       where ID is used to identify with the broker,\n"
-					"       TOPIC_PREFIX is prepended to all mqtt messages published by this node, and\n"
-					"       BROKER is ADDRESS[:PORT] for IPv4 and '[ADDRESS]'[:PORT] for IPv6\n"
-					"       Note: You may connect to multiple brokers re-using all options expcept BROKER.\n"
-					"             Simply provide them before specifying the broker.\n");
+	fprintf(stderr, " [-i ID] [-t TOPIC_PREFIX] [-b BROKER]");
+#endif
+#ifdef CONFIG_ZSTD
+	fprintf(stderr, " [-D DICT] [-c COMPRESSIONLEVEL] [-B BUFSIZE] [-T TIMEOUT_MS]");
 #endif
 	fprintf(stderr, "\n");
+
+#ifdef CONFIG_MQTT
+	fprintf(stderr, "MQTT options: [-i ID] [-t TOPIC_PREFIX] [-b BROKER]\n"
+			"       ID is used to identify with the broker,\n"
+			"       TOPIC_PREFIX is prepended to all mqtt messages published by this node, and\n"
+			"       BROKER is ADDRESS[:PORT] for IPv4 and '[ADDRESS]'[:PORT] for IPv6\n"
+			"       Note: You may connect to multiple brokers re-using all options expcept BROKER.\n"
+			"             Simply provide them before specifying the broker.\n");
+#endif
+
+#ifdef CONFIG_ZSTD
+	fprintf(stderr, "zstd compression options: [-D DICT] [-c COMPRESSIONLEVEL] [-B BUFSIZE] [-T TIMEOUT_MS]\n"
+			"	DICT is the path to a zstd dictionary file (default /lib/minstrel-rcd/dictionary/zdict)\n"
+			"	COMPRESSIONLEVEL sets the zstd compression level (default 3)\n"
+			"	BUFSIZE sets the size of the buffer where data is collected before compression (default 4096)\n"
+			"	TIMEOUT_MS sets the maximum wait time in milliseconds between flushes of the compression buffer (default 1000).\n");
+#endif
 }
 
 static void
 rcd_stop(int signo)
 {
+	static bool stopped = false;
+
+	if (stopped)
+		return;
+
+#ifdef CONFIG_ZSTD
+	zstd_stop(true);
+#endif
 #ifdef CONFIG_MQTT
 	mqtt_stop();
 #endif
 	uloop_end();
+
+	stopped = true;
 }
 
 static void
@@ -57,14 +82,15 @@ int main(int argc, char **argv)
 	const char *topic = NULL;
 	const char *capath = "/etc/ssl/certs/";
 #endif
-
-	uloop_init();
-
-#ifdef CONFIG_MQTT
-	rcd_config_init();
+#ifdef CONFIG_ZSTD
+	struct zstd_opts zstdopts = ZSTD_OPTS_DEFAULTS;
 #endif
 
-	while ((ch = getopt(argc, argv, "h:i:C:b:t:")) != -1) {
+	uloop_init();
+	rcd_config_init();
+	config_init_zstd(&zstdopts);
+
+	while ((ch = getopt(argc, argv, "h:i:C:b:t:D:c:B:T:")) != -1) {
 		switch (ch) {
 		case 'h':
 			rcd_server_add(optarg);
@@ -84,6 +110,20 @@ int main(int argc, char **argv)
 			mqtt_broker_add_cli(optarg, bind_addr, mqtt_id, topic, capath);
 #endif
 			break;
+#ifdef CONFIG_ZSTD
+		case 'D':
+			zstdopts.dict = optarg;
+			break;
+		case 'c':
+			zstdopts.comp_level = atoi(optarg);
+			break;
+		case 'B':
+			zstdopts.bufsize = atoi(optarg);
+			break;
+		case 'T':
+			zstdopts.timeout_ms = atoi(optarg);
+			break;
+#endif
 		default:
 			usage();
 			exit(1);
@@ -92,11 +132,20 @@ int main(int argc, char **argv)
 
 	rcd_setup_signals();
 
+#ifdef CONFIG_ZSTD
+	if(zstd_init(&zstdopts)) {
+		uloop_end();
+		return -1;
+	}
+#endif
+
 	rcd_phy_init();
 	rcd_server_init();
 #ifdef CONFIG_MQTT
 	mqtt_init();
 #endif
+
+	printf("ready to accept connections...\n");
 
 	uloop_run();
 

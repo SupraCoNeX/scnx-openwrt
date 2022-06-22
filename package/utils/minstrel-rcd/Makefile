@@ -23,7 +23,7 @@ define Package/minstrel-rcd
   SECTION:=utils
   CATEGORY:=Utilities
   TITLE:=Control daemon for mac80211 minstrel rate control
-  DEPENDS:=+libubox +libuci +MINSTREL_RCD_MQTT:libmosquitto-ssl
+  DEPENDS:=+libubox +libuci +MQTT_SUPPORT:libmosquitto-ssl +ZSTD_COMPRESSION:libzstd
   MAINTAINER:=Felix Fietkau <nbd@nbd.name>
 endef
 
@@ -37,32 +37,35 @@ define Package/minstrel-rcd/conffiles
 endef
 
 define Package/minstrel-rcd/config
-choice
-	prompt "mqtt support"
-	default MINSTREL_RCD_NO_MQTT
+  config MQTT_SUPPORT
+	  bool "mqtt support"
+	  default n
 
-	config MINSTREL_RCD_NO_MQTT
-		bool "No"
-
-	config MINSTREL_RCD_MQTT
-		bool "Yes"
-endchoice
+	config ZSTD_COMPRESSION
+		bool "zstd compression"
+		default n
 endef
 
-ifeq ($(CONFIG_MINSTREL_RCD_NO_MQTT),y)
+ifeq ($(CONFIG_MQTT_SUPPORT),y)
+	CMAKE_OPTIONS += -DCMAKE_CONFIG_MQTT=y
+else
 	CONFFILE:=minstrel-rcd.config
 endif
 
-ifeq ($(CONFIG_MINSTREL_RCD_MQTT),y)
-	CONFFILE:=minstrel-rcd-mqtt.config
-	CMAKE_OPTIONS += -DCONFIG_MQTT=1
+ifeq ($(CONFIG_ZSTD_COMPRESSION),y)
+	CMAKE_OPTIONS += -DCMAKE_CONFIG_ZSTD=y
+	DICTFILE:=dictionary.zdict
 endif
 
 define Package/minstrel-rcd/install
 	$(INSTALL_DIR) $(1)/usr/sbin $(1)/etc/init.d $(1)/etc/config
 	$(INSTALL_BIN) ./files/minstrel-rcd.init $(1)/etc/init.d/minstrel-rcd
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/minstrel-rcd $(1)/usr/sbin/
-	$(INSTALL_DATA) ./files/$(CONFFILE) $(1)/etc/config/minstrel-rcd
+	$(INSTALL_DATA) ./files/minstrel-rcd.config $(1)/etc/config/minstrel-rcd
+ifeq ($(CONFIG_ZSTD_COMPRESSION),y)
+	$(INSTALL_DIR) $(1)/lib/minstrel-rcd
+	$(INSTALL_DATA) ./files/$(DICTFILE) $(1)/lib/minstrel-rcd/dictionary.zdict
+endif
 endef
 
 $(eval $(call BuildPackage,minstrel-rcd))

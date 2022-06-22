@@ -33,6 +33,9 @@ phy_event_read_buf(struct phy *phy, char *buf)
 		*next = 0;
 
 		rcd_client_phy_event(phy, cur);
+#ifdef CONFIG_ZSTD
+		zstd_read_fmt("%s;%s\n", phy_name(phy), cur);
+#endif
 #ifdef CONFIG_MQTT
 		mqtt_phy_event(phy, cur);
 #endif
@@ -164,6 +167,34 @@ void rcd_phy_init_client(struct client *cl)
 		rcd_client_set_phy_state(cl, phy, true);
 }
 
+#ifdef CONFIG_ZSTD
+void rcd_phy_dump_zstd(struct client *cl, struct phy *phy)
+{
+	char buf[512];
+	void *compressed;
+	size_t clen;
+	FILE *f;
+	int error;
+
+	f = fopen(phy_file_path(phy, "api_info"), "r");
+	if (!f)
+		return;
+
+	while (fgets(buf, sizeof(buf), f) != NULL) {
+		error = zstd_fmt_compress(&compressed, &clen, "*;0;%s", buf);
+		if (error) {
+			fclose(f);
+			return;
+		}
+
+		client_write(cl, compressed, clen);
+		free(compressed);
+	}
+
+	fclose(f);
+}
+#endif
+
 void rcd_phy_dump(struct client *cl, struct phy *phy)
 {
 	char buf[512];
@@ -201,6 +232,11 @@ void rcd_phy_control(struct client *cl, char *data)
 	struct phy *phy;
 	const char *err;
 	char *sep;
+#ifdef CONFIG_ZSTD
+	void *compressed;
+	size_t clen;
+	int error;
+#endif
 
 	sep = strchr(data, ';');
 	if (!sep) {
@@ -228,14 +264,14 @@ retry:
 	return;
 
 error:
-#ifdef CONFIG_MQTT
-	/* do not send error messages over mqtt */
-	if (!cl) {
-		fprintf(stderr, "mqtt command '%s' failed: %s\n", data, err);
+#ifdef CONFIG_ZSTD
+	error = zstd_fmt_compress(&compressed, &clen, "*;0;#error;%s\n", err);
+	if (error)
 		return;
-	}
-#endif
+	free(compressed);
+#else
 	client_printf(cl, "*;0;#error;%s\n", err);
+#endif
 }
 
 void rcd_phy_init(void)
