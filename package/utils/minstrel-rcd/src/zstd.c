@@ -77,7 +77,7 @@ zstd_compress_into(void *dst, size_t dstlen, void *data, size_t len, size_t *com
 	size_t clen = ZSTD_compressBound(len);
 
 	if (clen > dstlen) {
-		fprintf(stderr, "cannot reliably compress data of size %u (compress bound %u) into buffer of size %u\n", len, clen, dstlen);
+		fprintf(stderr, "cannot reliably compress data of size %zu (compress bound %zu) into buffer of size %zu\n", len, clen, dstlen);
 		return -1;
 	}
 
@@ -145,7 +145,7 @@ load_dict(const char *path, int complvl)
 	fsize = st.st_size;
 	size = (size_t) fsize;
 
-	if ((fsize < 0) || (fsize != (size_t) size)) {
+	if ((fsize < 0) || (fsize != (off_t) size)) {
 		fprintf(stderr, "%s: filesize too large\n", path);
 		return NULL;
 	}
@@ -244,7 +244,7 @@ zstd_read_fmt(const char *fmt, ...)
 	if (read < _in.size)
 		goto ok;
 
-	fprintf(stderr, "discarding data of length %u: cannot fit into buffer of size: %u\n", read, _in.size);
+	fprintf(stderr, "discarding data of length %zu: cannot fit into buffer of size: %zu\n", read, _in.size);
 
 	return -1;
 

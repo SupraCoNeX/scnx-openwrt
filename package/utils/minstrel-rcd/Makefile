@@ -13,8 +13,8 @@ PKG_RELEASE:=1
 PKG_BUILD_DIR := $(BUILD_DIR)/$(PKG_NAME)-$(PKG_RELEASE)
 
 PKG_CONFIG_DEPENDS:= \
-	CONFIG_MINSTREL_RCD_NO_MQTT \
-	CONFIG_MINSTREL_RCD_MQTT
+  CONFIG_MQTT_SUPPORT \
+  CONFIG_ZSTD_COMPRESSION
 
 include $(INCLUDE_DIR)/package.mk
 include $(INCLUDE_DIR)/cmake.mk
@@ -37,13 +37,13 @@ define Package/minstrel-rcd/conffiles
 endef
 
 define Package/minstrel-rcd/config
-  config MQTT_SUPPORT
+	config MQTT_SUPPORT
 	  bool "mqtt support"
 	  default n
 
 	config ZSTD_COMPRESSION
-		bool "zstd compression"
-		default n
+	  bool "zstd compression"
+	  default n
 endef
 
 ifeq ($(CONFIG_MQTT_SUPPORT),y)

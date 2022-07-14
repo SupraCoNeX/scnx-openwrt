@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.6)
 
 PROJECT(minstrel-rcd C)
 
-SET(SOURCES main.c phy.c server.c client.c)
+SET(SOURCES main.c phy.c server.c client.c config.c)
 
 ADD_DEFINITIONS(-Wall -Werror)
 IF(CMAKE_C_COMPILER_VERSION VERSION_GREATER 6)
@@ -24,7 +24,7 @@ IF(DEFINED CMAKE_CONFIG_MQTT)
 	FIND_LIBRARY(mosquitto_library NAMES mosquitto)
 	FIND_PATH(mosquitto_include_dir mosquitto.h)
 	INCLUDE_DIRECTORIES(${mosquitto_include_dir})
-	SET(SOURCES ${SOURCES} mqtt.c config.c)
+	SET(SOURCES ${SOURCES} mqtt.c)
 	SET(LIBS ${LIBS} ${mosquitto_library})
 	ADD_DEFINITIONS(-DCONFIG_MQTT -D_GNU_SOURCE)
 ENDIF(DEFINED CMAKE_CONFIG_MQTT)
