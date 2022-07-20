@@ -656,7 +656,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
 +		if (rate < 0)
 +			goto error;
 +
-+		if (kstrtouint(countlist[0], 16, &count))
++		if (kstrtouint(countlist[i], 16, &count))
 +			goto error;
 +
 +		minstrel_ht_set_rate(mp, mi, ratetbl, i, rate);
