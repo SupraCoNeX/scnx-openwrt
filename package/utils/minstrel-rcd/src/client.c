@@ -1,11 +1,32 @@
 // SPDX-License-Identifier: GPL-2.0
 /* Copyright (C) 2021 Felix Fietkau <nbd@nbd.name> */
+#include <libgen.h>
 #include "rcd.h"
 
 static LIST_HEAD(clients);
 #ifdef CONFIG_ZSTD
 static LIST_HEAD(zclients);
 #endif
+
+static const char*
+phy_driver(struct phy *phy)
+{
+	char path[64], buf[64];
+	size_t len;
+	ssize_t n_written;
+
+	len = snprintf(path, sizeof(path), "/sys/class/ieee80211/%s/device/driver", phy_name(phy));
+	if (len >= sizeof(path))
+		return NULL;
+
+	n_written = readlink(path, buf, sizeof(buf));
+	if (n_written == sizeof(buf))
+		return NULL;
+
+	buf[n_written] = '\0';
+
+	return basename(buf);
+}
 
 void rcd_client_phy_event(struct phy *phy, const char *str)
 {
@@ -28,7 +49,7 @@ void rcd_client_set_phy_state(struct client *cl, struct phy *phy, bool add)
 		cl->init_done = true;
 	}
 
-	client_phy_printf(cl, phy, "0;%s\n", add ? "add" : "remove");
+	client_phy_printf(cl, phy, "0;%s;%s\n", add ? "add" : "remove", phy_driver(phy));
 }
 
 static void
