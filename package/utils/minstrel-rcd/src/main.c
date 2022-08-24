@@ -82,13 +82,14 @@ int main(int argc, char **argv)
 	const char *topic = NULL;
 	const char *capath = "/etc/ssl/certs/";
 #endif
-#ifdef CONFIG_ZSTD
-	struct zstd_opts zstdopts = ZSTD_OPTS_DEFAULTS;
-#endif
 
 	uloop_init();
 	rcd_config_init();
+
+#ifdef CONFIG_ZSTD
+	struct zstd_opts zstdopts = ZSTD_OPTS_DEFAULTS;
 	config_init_zstd(&zstdopts);
+#endif
 
 	while ((ch = getopt(argc, argv, "h:i:C:b:t:D:c:B:T:")) != -1) {
 		switch (ch) {

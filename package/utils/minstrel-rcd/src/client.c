@@ -107,13 +107,14 @@ void rcd_client_accept(int fd)
 	client_start(cl);
 }
 
+
+#ifdef CONFIG_ZSTD
 bool
 rcd_has_clients(bool compressed)
 {
 	return compressed ? !list_empty(&zclients) : !list_empty(&clients);
 }
 
-#ifdef CONFIG_ZSTD
 static void
 zclient_start(struct client *cl)
 {

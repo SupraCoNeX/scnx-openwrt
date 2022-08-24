@@ -109,6 +109,8 @@ void mqtt_phy_event(struct phy *phy, const char *str);
 #ifdef CONFIG_ZSTD
 #define client_write(cl, buf, len) ustream_write(&(cl)->sfd.stream, buf, len, false)
 
+bool rcd_has_clients(bool compressed);
+
 struct zstd_opts {
 	const char *dict;
 	int comp_level;
@@ -135,7 +137,6 @@ int zstd_read_fmt(const char *fmt, ...);
 void rcd_zclient_accept(int fd);
 void rcd_zclient_set_phy_state(struct client *cl, struct phy *phy, bool add);
 void rcd_zclient_write(const void *buf, size_t len);
-bool rcd_has_clients(bool compressed);
 
 void rcd_phy_dump_zstd(struct client *cl, struct phy *phy);
 #endif
