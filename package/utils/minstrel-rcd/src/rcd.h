@@ -84,7 +84,7 @@ void rcd_client_set_phy_state(struct client *cl, struct phy *phy, bool add);
 void rcd_phy_init(void);
 void rcd_phy_init_client(struct client *cl);
 void rcd_phy_dump(struct client *cl, struct phy *phy);
-void rcd_phy_control(struct client *cl, char *data);
+void rcd_phy_control(struct client *cl, char *data, bool compression);
 
 #define client_printf(cl, ...) ustream_printf(&(cl)->sfd.stream, __VA_ARGS__)
 #define client_vprintf(cl, va_args) ustream_vprintf(&(cl)->sfd.stream, va_args)

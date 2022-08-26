@@ -23,6 +23,17 @@ phy_file_path(struct phy *phy, const char *file)
 	return path;
 }
 
+static const char *
+phy_debugfs_file_path(struct phy *phy, const char *file)
+{
+	static char path[64];
+
+	snprintf(path, sizeof(path), "/sys/kernel/debug/ieee80211/%s/%s",
+	         phy_name(phy), file);
+
+	return path;
+}
+
 static int
 phy_event_read_buf(struct phy *phy, char *buf)
 {
@@ -227,22 +238,60 @@ void mqtt_phy_dump(struct phy *phy, int (*cb)(void*, char*), void *cb_arg)
 }
 #endif
 
-void rcd_phy_control(struct client *cl, char *data)
+static int
+phy_fd_write(int fd, const char *s)
+{
+retry:
+	if (write(fd, s, strlen(s)) < 0) {
+		if (errno == EINTR || errno == EAGAIN)
+			goto retry;
+
+		return errno;
+	}
+
+	return 0;
+}
+
+static int
+phy_config(struct phy *phy, char *cmd)
+{
+	char *file, *arg;
+	int fd, err;
+
+	file = strtok(cmd, ";");
+	arg = strtok(NULL, ";");
+
+	/* make sure file cannot contain dots as this would
+	 * allow writing to files with root privileges if
+	 * file is something like '../../../../ ...
+	 * */
+	if (!file || !arg || strchr(file, '.'))
+		return -EINVAL;
+
+	fd = open(phy_debugfs_file_path(phy, file), O_WRONLY);
+	if (fd < 0)
+		return errno;
+
+	err = phy_fd_write(fd, arg);
+	close(fd);
+
+	return err;
+}
+
+void rcd_phy_control(struct client *cl, char *data, bool compressed)
 {
 	struct phy *phy;
-	const char *err;
+	const char *err = "Syntax error";
 	char *sep;
 #ifdef CONFIG_ZSTD
-	void *compressed;
+	void *buf;
 	size_t clen;
 	int error;
 #endif
 
 	sep = strchr(data, ';');
-	if (!sep) {
-		err = "Syntax error";
+	if (!sep)
 		goto error;
-	}
 
 	*sep = 0;
 	phy = vlist_find(&phy_list, data, phy, node);
@@ -252,12 +301,26 @@ void rcd_phy_control(struct client *cl, char *data)
 	}
 
 	data = sep + 1;
-retry:
-	if (write(phy->control_fd, data, strlen(data)) < 0) {
-		if (errno == EINTR || errno == EAGAIN)
-			goto retry;
 
-		err = strerror(errno);
+	sep = strchr(data, ';');
+	if (sep) {
+		*sep = 0;
+		if (strcmp(data, "debugfs") == 0) {
+			error = phy_config(phy, sep + 1);
+			if (error) {
+				err = strerror(error);
+				goto error;
+			} else {
+				return;
+			}
+		}
+
+		*sep = ';';
+	}
+
+	error = phy_fd_write(phy->control_fd, data);
+	if (error) {
+		err = strerror(error);
 		goto error;
 	}
 
@@ -265,13 +328,17 @@ retry:
 
 error:
 #ifdef CONFIG_ZSTD
-	error = zstd_fmt_compress(&compressed, &clen, "*;0;#error;%s\n", err);
-	if (error)
-		return;
-	free(compressed);
-#else
-	client_printf(cl, "*;0;#error;%s\n", err);
+	if (compressed) {
+		error = zstd_fmt_compress(&buf, &clen, "*;0;#error;%s\n", err);
+		if (error)
+			return;
+		client_write(cl, buf, clen);
+		free(buf);
+	} else
 #endif
+	{
+		client_printf(cl, "*;0;#error;%s\n", err);
+	}
 }
 
 void rcd_phy_init(void)

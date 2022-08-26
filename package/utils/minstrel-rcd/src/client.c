@@ -64,7 +64,7 @@ client_start(struct client *cl)
 }
 
 static int
-client_handle_data(struct client *cl, char *data)
+client_handle_data(struct client *cl, char *data, bool compressed)
 {
 	char *sep;
 	int len = 0;
@@ -74,7 +74,7 @@ client_handle_data(struct client *cl, char *data)
 		if (sep[-1] == '\r')
 			sep[-1] = 0;
 		*sep = 0;
-		rcd_phy_control(cl, data);
+		rcd_phy_control(cl, data, compressed);
 		data = sep + 1;
 	}
 
@@ -93,7 +93,7 @@ client_notify_read(struct ustream *s, int bytes)
 		if (!data)
 			return;
 
-		len = client_handle_data(cl, data);
+		len = client_handle_data(cl, data, false);
 		if (!len)
 			return;
 
@@ -147,6 +147,26 @@ zclient_start(struct client *cl)
 		rcd_zclient_set_phy_state(cl, phy, true);
 }
 
+static void
+zclient_notify_read(struct ustream *s, int bytes)
+{
+	struct client *cl = container_of(s, struct client, sfd.stream);
+	char *data;
+	int len;
+
+	while (1) {
+		data = ustream_get_read_buf(s, &len);
+		if (!data)
+			return;
+
+		len = client_handle_data(cl, data, true);
+		if (!len)
+			return;
+
+		ustream_consume(s, len);
+	}
+}
+
 void rcd_zclient_accept(int fd)
 {
 	struct ustream *us;
@@ -154,7 +174,7 @@ void rcd_zclient_accept(int fd)
 
 	cl = calloc(1, sizeof(*cl));
 	us = &cl->sfd.stream;
-	us->notify_read = client_notify_read;
+	us->notify_read = zclient_notify_read;
 	us->notify_state = client_notify_state;
 	us->string_data = true;
 	ustream_fd_init(&cl->sfd, fd);
@@ -164,7 +184,7 @@ void rcd_zclient_accept(int fd)
 
 void rcd_zclient_set_phy_state(struct client *cl, struct phy *phy, bool add)
 {
-	char str[16];
+	char str[32];
 	char buf[128]; // worst-case compress bound for 16 bytes is 79
 	size_t clen;
 	int error;
@@ -180,9 +200,10 @@ void rcd_zclient_set_phy_state(struct client *cl, struct phy *phy, bool add)
 		cl->init_done = true;
 	}
 
-	snprintf(str, sizeof(str), "%s;0;%s\n", phy_name(phy), add ? "add" : "remove");
+	snprintf(str, sizeof(str), "%s;0;%s;%s\n", phy_name(phy), add ? "add" : "remove",
+	         phy_driver(phy));
 
-	error = zstd_compress_into(&buf, sizeof(buf), str, strlen(str), &clen);
+	error = zstd_compress_into(buf, sizeof(buf), str, strlen(str), &clen);
 	if (error)
 		return;
 
