@@ -8,9 +8,10 @@ static LIST_HEAD(clients);
 static LIST_HEAD(zclients);
 #endif
 
-static const char*
+static const char *
 phy_driver(struct phy *phy)
 {
+	static char driver[16];
 	char path[64], buf[64];
 	size_t len;
 	ssize_t n_written;
@@ -24,8 +25,9 @@ phy_driver(struct phy *phy)
 		return NULL;
 
 	buf[n_written] = '\0';
+	strncpy(driver, basename(buf), sizeof(driver));
 
-	return basename(buf);
+	return driver;
 }
 
 void rcd_client_phy_event(struct phy *phy, const char *str)
