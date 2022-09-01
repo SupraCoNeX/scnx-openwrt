@@ -375,8 +375,8 @@ void rcd_phy_control(struct client *cl, char *data, bool compressed)
 #ifdef CONFIG_ZSTD
 	void *buf;
 	size_t clen;
-	int error;
 #endif
+	int error;
 
 	sep = strchr(data, ';');
 	if (!sep)
