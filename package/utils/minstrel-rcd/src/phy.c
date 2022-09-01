@@ -253,20 +253,87 @@ retry:
 }
 
 static int
-phy_config(struct phy *phy, char *cmd)
+phy_debugfs_read(struct client *cl, struct phy *phy, const char *file, bool compressed)
 {
-	char *file, *arg;
-	int fd, err;
+	char *buf, *cur;
+	int fd, len, err = 0, offset = 0, bufsiz = 512;
+#ifdef CONFIG_ZSTD
+	void *cbuf;
+	size_t clen;
+#endif
 
-	file = strtok(cmd, ";");
-	arg = strtok(NULL, ";");
+	fd = open(phy_debugfs_file_path(phy, file), O_RDONLY);
+	if (fd < 0)
+		return errno;
 
-	/* make sure file cannot contain dots as this would
-	 * allow writing to files with root privileges if
-	 * file is something like '../../../../ ...
-	 * */
-	if (!file || !arg || strchr(file, '.'))
-		return -EINVAL;
+	buf = malloc(bufsiz);
+
+	while (1) {
+		if (!buf) {
+			err = -ENOMEM;
+			goto error;
+		}
+
+		while (1) {
+			len = read(fd, buf + offset, bufsiz - 1 - offset);
+			if (len == 0) {
+				if (buf[offset + len - 1] == '\n')
+					buf[offset + len - 1] = '\0';
+				else
+					buf[offset + len] = '\0';
+				goto done;
+			} else if (len < 0) {
+				if (errno == EAGAIN) {
+					err = errno;
+					goto error;
+				}
+
+				if (errno == EINTR)
+					continue;
+
+				free(buf);
+				goto error;
+			} else if (len == bufsiz - 1 - offset) {
+				bufsiz *= 2;
+				buf = realloc(buf, bufsiz);
+				break;
+			}
+
+			offset += len;
+		}
+	}
+done:
+	for (cur = buf; *cur != '\0'; cur++)
+		if (*cur == '\n')
+			*cur = ',';
+
+#ifdef CONFIG_ZSTD
+	if (compressed) {
+		err = zstd_fmt_compress(&cbuf, &clen, "%s;0;debugfs;%s;%s\n",
+		                        phy_name(phy), file, buf);
+		if (err) {
+			free(buf);
+			goto error;
+		}
+
+		client_write(cl, cbuf, clen);
+		free(cbuf);
+	} else
+#endif
+	{
+		client_phy_printf(cl, phy, "0;debugfs;%s;%s\n", file, buf);
+	}
+
+	free(buf);
+error:
+	close(fd);
+	return err;
+}
+
+static int
+phy_debugfs_write(struct phy *phy, const char *file, const char *arg)
+{
+	int err, fd;
 
 	fd = open(phy_debugfs_file_path(phy, file), O_WRONLY);
 	if (fd < 0)
@@ -276,6 +343,28 @@ phy_config(struct phy *phy, char *cmd)
 	close(fd);
 
 	return err;
+}
+
+static int
+phy_debugfs(struct client *cl, struct phy *phy, char *cmd, bool compressed)
+{
+	char *file, *arg;
+
+	file = strtok(cmd, ";");
+	arg = strtok(NULL, ";");
+
+	/* make sure file cannot contain dots as this would
+	 * allow writing to files with root privileges if
+	 * file is something like '../../../../ ...
+	 * Also, limit path length to 64 chars as a precaution.
+	 * */
+	if (!file || strchr(file, '.') || strlen(file) > 64)
+		return -EINVAL;
+
+	if (arg)
+		return phy_debugfs_write(phy, file, arg);
+	else
+		return phy_debugfs_read(cl, phy, file, compressed);
 }
 
 void rcd_phy_control(struct client *cl, char *data, bool compressed)
@@ -306,7 +395,7 @@ void rcd_phy_control(struct client *cl, char *data, bool compressed)
 	if (sep) {
 		*sep = 0;
 		if (strcmp(data, "debugfs") == 0) {
-			error = phy_config(phy, sep + 1);
+			error = phy_debugfs(cl, phy, sep + 1, compressed);
 			if (error) {
 				err = strerror(error);
 				goto error;
