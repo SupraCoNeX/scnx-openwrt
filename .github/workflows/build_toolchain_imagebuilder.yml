@@ -1,0 +1,126 @@
+name: Build OpenWrt Imagebuilder with Toolchain
+
+on:
+  push:
+jobs:
+  build:
+    name: Build Kernel with external toolchain
+    runs-on: ubuntu-latest
+    strategy:
+       fail-fast: False
+       matrix:
+         target:
+          - mediatek/mt7622
+          - ipq40xx/generic
+
+    container: registry.gitlab.com/openwrt/buildbot/buildworker-3.4.1
+
+    steps:
+      - name: Checkout master directory
+        uses: actions/checkout@v2
+        with:
+          path: openwrt
+
+      - name: Checkout packages feed
+        uses: actions/checkout@v2
+        with:
+          repository: openwrt/packages
+          path: openwrt/feeds/packages
+
+      - name: Checkout luci feed
+        uses: actions/checkout@v2
+        with:
+          repository: openwrt/luci
+          path: openwrt/feeds/luci
+
+      - name: Checkout routing feed
+        uses: actions/checkout@v2
+        with:
+          repository: openwrt/routing
+          path: openwrt/feeds/routing
+
+      - name: Checkout telephony feed
+        uses: actions/checkout@v2
+        with:
+          repository: openwrt/telephony
+          path: openwrt/feeds/telephony
+
+      - name: Fix permission
+        run: |
+          chown -R buildbot:buildbot openwrt
+
+      - name: Initialization environment
+        run: |
+          TARGET=$(echo ${{ matrix.target }} | cut -d "/" -f 1)
+          SUBTARGET=$(echo ${{ matrix.target }} | cut -d "/" -f 2)
+          echo "TARGET=$TARGET" >> "$GITHUB_ENV"
+          echo "SUBTARGET=$SUBTARGET" >> "$GITHUB_ENV"
+
+      - name: Update & Install feeds
+        shell: su buildbot -c "sh -e {0}"
+        working-directory: openwrt
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Parse toolchain file
+        working-directory: openwrt
+        run: |
+          TOOLCHAIN_FILE=$(curl "https://downloads.cdn.openwrt.org/snapshots/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/sha256sums" \
+            | sed -n -e 's/.*\(openwrt-toolchain.*\).tar.xz/\1/p')
+
+          echo "TOOLCHAIN_FILE=$TOOLCHAIN_FILE" >> "$GITHUB_ENV"
+
+      - name: Download external toolchain
+        shell: su buildbot -c "sh -e {0}"
+        working-directory: openwrt
+        run: |
+          wget -O - https://downloads.cdn.openwrt.org/snapshots/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/${TOOLCHAIN_FILE}.tar.xz \
+            | tar --xz -xf -
+
+      - name: Configure external toolchain
+        shell: su buildbot -c "sh -e {0}"
+        working-directory: openwrt
+        run: |
+          echo CONFIG_ALL=y >> .config
+          echo CONFIG_IB=y >> .config
+
+          ./scripts/ext-toolchain.sh \
+            --toolchain ${{ env.TOOLCHAIN_FILE }}/toolchain-* \
+            --overwrite-config \
+            --config ${{ env.TARGET }}/${{ env.SUBTARGET }}
+
+          make defconfig
+
+      - name: Show configuration
+        shell: su buildbot -c "sh -e {0}"
+        working-directory: openwrt
+        run: ./scripts/diffconfig.sh
+
+      - name: Build tools
+        shell: su buildbot -c "sh -e {0}"
+        working-directory: openwrt
+        run: make tools/install -j$(nproc) BUILD_LOG=1
+
+      - name: Build toolchain
+        shell: su buildbot -c "sh -e {0}"
+        working-directory: openwrt
+        run: make toolchain/install -j$(nproc) BUILD_LOG=1
+
+      - name: Build Kernel
+        shell: su buildbot -c "sh -e {0}"
+        working-directory: openwrt
+        run: make -j$(nproc) BUILD_LOG=1
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ env.TARGET }}-${{ env.SUBTARGET }}-logs
+          path: "openwrt/logs"
+
+      - name: Store build output
+        uses: actions/upload-artifact@v1
+        with:
+          name: ${{ env.TARGET }}_${{ env.SUBTARGET }}_img
+          path: openwrt/bin/targets
