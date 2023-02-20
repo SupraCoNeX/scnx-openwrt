@@ -1,0 +1,87 @@
+From 65a5b979aaf08d5429a2f804f25cba48bf4b91e5 Mon Sep 17 00:00:00 2001
+From: Thomas Huehn <thomas.huehn@hs-nordhausen.de>
+Date: Mon, 20 Feb 2023 10:43:08 +0100
+Subject: [PATCH 1/3] mt7615: disable mt7615 hardware retry chain auto index
+ switching
+
+mt7615 hardware switches the mrr index in an automated
+manner based on the success rate of in mrr index.
+In order to have reproducable experiments in mrr manual
+setup mode, add a debugfs to disable this feature:
+
+echo 1 > /sys/kernel/debug/ieee80211/phy0/mt76/force_rate_retry
+
+Signed-off-by: Thomas Huehn <thomas.huehn@hs-nordhausen.de>
+---
+ mt7615/debugfs.c | 28 ++++++++++++++++++++++++++++
+ mt7615/mac.c     |  3 +++
+ mt7615/mt7615.h  |  2 ++
+ 3 files changed, 33 insertions(+)
+
+--- a/mt7615/debugfs.c
++++ b/mt7615/debugfs.c
+@@ -93,6 +93,33 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_scs, mt761
+ 			 mt7615_scs_set, "%lld\n");
+ 
+ static int
++mt7615_force_rate_retry_set(void *data, u64 val)
++{
++	struct mt7615_dev *dev = data;
++
++	if (!mt7615_wait_for_mcu_init(dev))
++		return 0;
++
++	mt76_rmw_field(dev, MT_AGG_ARCR, MT_AGG_ARCR_INIT_RATE1, !!val);
++	dev->force_rate_retry_en = true;
++
++	return 0;
++}
++
++static int
++mt7615_force_rate_retry_get(void *data, u64 *val)
++{
++	struct mt7615_dev *dev = data;
++
++	*val = dev->force_rate_retry_en;
++
++	return 0;
++}
++
++DEFINE_DEBUGFS_ATTRIBUTE(fops_force_rate_retry, mt7615_force_rate_retry_get,
++			 mt7615_force_rate_retry_set, "%lld\n");
++
++static int
+ mt7615_pm_set(void *data, u64 val)
+ {
+ 	struct mt7615_dev *dev = data;
+@@ -561,6 +588,7 @@ int mt7615_init_debugfs(struct mt7615_de
+ 					    mt76_queues_read);
+ 	debugfs_create_devm_seqfile(dev->mt76.dev, "acq", dir,
+ 				    mt7615_queues_acq);
++	debugfs_create_file("force_rate_retry", 0600, dir, dev, &fops_force_rate_retry);
+ 	debugfs_create_file("ampdu_stat", 0400, dir, dev, &mt7615_ampdu_stat_fops);
+ 	debugfs_create_file("scs", 0600, dir, dev, &fops_scs);
+ 	debugfs_create_file("dbdc", 0600, dir, dev, &fops_dbdc);
+--- a/mt7615/mac.c
++++ b/mt7615/mac.c
+@@ -1002,6 +1002,9 @@ mt7615_mac_update_rate_desc(struct mt761
+ 		if ((ref->flags ^ rates[i].flags) & IEEE80211_TX_RC_SHORT_GI)
+ 			rates[i].flags ^= IEEE80211_TX_RC_SHORT_GI;
+ 
++		if (dev->force_rate_retry_en)
++			continue;
++
+ 		for (j = 0; j < i; j++) {
+ 			if (rates[i].idx != rates[j].idx)
+ 				continue;
+--- a/mt7615/mt7615.h
++++ b/mt7615/mt7615.h
+@@ -264,6 +264,8 @@ struct mt7615_dev {
+ 	wait_queue_head_t reset_wait;
+ 	u32 reset_state;
+ 
++	bool force_rate_retry_en;
++
+ 	struct list_head sta_poll_list;
+ 	spinlock_t sta_poll_lock;
+ 

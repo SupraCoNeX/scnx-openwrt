@@ -1,0 +1,28 @@
+From 8d5f7d37166dfe0adc9eb33b1e1cc04fcbc1c91e Mon Sep 17 00:00:00 2001
+From: Thomas Huehn <thomas.huehn@hs-nordhausen.de>
+Date: Mon, 20 Feb 2023 10:54:35 +0100
+Subject: [PATCH 3/3] mt7615: fix probing rate reporting
+
+Signed-off-by: Thomas Huehn <thomas.huehn@hs-nordhausen.de>
+---
+ mt7615/mac.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+--- a/mt7615/mac.c
++++ b/mt7615/mac.c
+@@ -1402,6 +1402,7 @@ static bool mt7615_fill_txs(struct mt761
+ 
+ 	if (!first_idx && rs->probe_rate.idx >= 0) {
+ 		info->status.rates[0] = rs->probe_rate;
++		info->flags |= IEEE80211_TX_CTL_RATE_CTRL_PROBE;
+ 
+ 		spin_lock_bh(&dev->mt76.lock);
+ 		if (sta->rate_probe) {
+@@ -1415,6 +1416,7 @@ static bool mt7615_fill_txs(struct mt761
+ 		spin_unlock_bh(&dev->mt76.lock);
+ 	} else {
+ 		info->status.rates[0] = rs->rates[first_idx / 2];
++		info->flags &= ~IEEE80211_TX_CTL_RATE_CTRL_PROBE;
+ 	}
+ 	info->status.rates[0].count = 0;
+ 

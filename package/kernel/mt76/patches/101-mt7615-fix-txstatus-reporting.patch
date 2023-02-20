@@ -1,0 +1,22 @@
+From 8990240cb1f1a5527ed90faf5dfbb3ef14ef9cc2 Mon Sep 17 00:00:00 2001
+From: Thomas Huehn <thomas.huehn@hs-nordhausen.de>
+Date: Mon, 20 Feb 2023 10:53:21 +0100
+Subject: [PATCH 2/3] mt7615: fix txstatus reporting
+
+Signed-off-by: Thomas Huehn <thomas.huehn@hs-nordhausen.de>
+---
+ mt7615/mac.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+--- a/mt7615/mac.c
++++ b/mt7615/mac.c
+@@ -1529,6 +1529,9 @@ static void mt7615_mac_add_txs(struct mt
+ 	u8 wcidx;
+ 	u8 pid;
+ 
++	if (txs_data[0] & cpu_to_le32(MT_TXS0_TXS_FORMAT))
++		return;
++
+ 	pid = le32_get_bits(txs_data[0], MT_TXS0_PID);
+ 	wcidx = le32_get_bits(txs_data[2], MT_TXS2_WCID);
+ 
