@@ -363,7 +363,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
 +	if (!val || val > HZ)
 +		return -EINVAL;
 +
-+	*(unsigned int *)data = val ? (HZ / val) : val;
++	*(unsigned int *)data = val ? (HZ / (u32)val) : val;
 +	return 0;
 +}
 +
@@ -1362,3 +1362,13 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  	if (ieee80211_is_s1g_beacon(hdr->frame_control))
  		return RX_CONTINUE;
  
+--- a/local-symbols
++++ b/local-symbols
+@@ -41,6 +41,7 @@ LIB80211_DEBUG=
+ MAC80211=
+ MAC80211_HAS_RC=
+ MAC80211_RC_MINSTREL=
++MAC80211_RC_MINSTREL_DEBUGFS_API=
+ MAC80211_RC_DEFAULT_MINSTREL=
+ MAC80211_RC_DEFAULT=
+ MAC80211_MESH=
