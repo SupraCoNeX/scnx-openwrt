@@ -1,0 +1,73 @@
+--- a/net/mac80211/rc80211_minstrel_ht_api.c
++++ b/net/mac80211/rc80211_minstrel_ht_api.c
+@@ -360,17 +360,18 @@ minstrel_ht_set_probe_rate(struct minstr
+ 
+ static int
+ minstrel_ht_set_rates(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
+-		      char *rate_str, char *count_str)
++		      char *rate_str, char *count_str, char* txpwr_str)
+ {
+ 	struct ieee80211_sta_rates *ratetbl;
++	struct ieee80211_hw *hw = mp->hw;
+ 	unsigned int count;
+ 	char *countlist[4];
+ 	char *ratelist[4];
+-	int rate;
+-	int n_rates;
+-	int n_count;
+-	int err = -EINVAL;
+-	int i;
++	char *txpwrlist[4];
++	int rate, txpwr;
++	int n_rates, n_count, n_txpwr;
++	s16 max_txpwr = 0;
++	int i, err = -EINVAL;
+ 
+ 	if (!rate_str || !count_str)
+ 		return -EINVAL;
+@@ -387,6 +388,11 @@ minstrel_ht_set_rates(struct minstrel_pr
+ 				       rate_str, ",");
+ 	n_count = minstrel_ht_get_args(countlist, ARRAY_SIZE(countlist),
+ 				       count_str, ",");
++	n_txpwr = minstrel_ht_get_args(txpwrlist, ARRAY_SIZE(txpwrlist),
++				       txpwr_str, ",");
++	if (n_txpwr > 0)
++		max_txpwr = ieee80211_hw_get_max_txpower_idx(hw);
++
+ 	for (i = 0; i < min(n_rates, n_count); i++) {
+ 		rate = minstrel_ht_rate_from_str(mi, ratelist[i]);
+ 		if (rate < 0)
+@@ -399,6 +405,15 @@ minstrel_ht_set_rates(struct minstrel_pr
+ 		ratetbl->rate[i].count = count;
+ 		ratetbl->rate[i].count_rts = count;
+ 		ratetbl->rate[i].count_cts = count;
++
++		if (txpwrlist[i]) {
++			if (kstrtouint(txpwrlist[i], 16, &txpwr))
++				goto error;
++			if (txpwr > max_txpwr)
++				goto error;
++
++			ratetbl->rate[i].txpower_idx = (s16)txpwr;
++		}
+ 	}
+ 	if (!i)
+ 		goto error;
+@@ -424,7 +439,7 @@ minstrel_ht_api_sta_cmd(struct minstrel_
+ {
+ 	struct minstrel_ht_sta *mi;
+ 	uint8_t macaddr[ETH_ALEN];
+-	char *args[3];
++	char *args[4];
+ 	int n_args;
+ 	int ret = -EINVAL;
+ 
+@@ -449,7 +464,7 @@ minstrel_ht_api_sta_cmd(struct minstrel_
+ 		ret = minstrel_ht_set_probe_rate(mi, args[1]);
+ 		break;
+ 	case STA_CMD_RATES:
+-		ret = minstrel_ht_set_rates(mp, mi, args[1], args[2]);
++		ret = minstrel_ht_set_rates(mp, mi, args[1], args[2], args[3]);
+ 		break;
+ 	}
+ 
