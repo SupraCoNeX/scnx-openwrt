@@ -1,0 +1,58 @@
+--- a/net/mac80211/debugfs.c
++++ b/net/mac80211/debugfs.c
+@@ -580,9 +580,46 @@ static ssize_t queues_read(struct file *
+ 	return simple_read_from_buffer(user_buf, count, ppos, buf, res);
+ }
+ 
++static ssize_t tpc_support_read(struct file *file, char __user *user_buf,
++				size_t count, loff_t *ppos)
++{
++	struct ieee80211_local *local = file->private_data;
++	size_t bufsz = 6 + 20 * (local->hw.n_txpower_ranges);
++	char *buf = kzalloc(bufsz, GFP_KERNEL);
++	char *pos = buf, *end = buf + bufsz - 1;
++	ssize_t rv;
++	int i;
++
++	if (!buf)
++		return -ENOMEM;
++
++	if (ieee80211_hw_check(&local->hw, SUPPORTS_TPC_PER_PACKET)) {
++		pos += scnprintf(pos, end - pos, "pkt");
++	} else if (ieee80211_hw_check(&local->hw, SUPPORTS_TPC_PER_MRR)) {
++		pos += scnprintf(pos, end - pos, "mrr");
++	} else {
++		pos += scnprintf(pos, end - pos, "not\n");
++		goto end;
++	}
++	pos += scnprintf(pos, end - pos, ";%x\n", local->hw.n_txpower_ranges);
++
++	for (i = 0; i < local->hw.n_txpower_ranges; i++) {
++		struct ieee80211_hw_txpower_range *rng = &local->hw.txpower_ranges[i];
++		pos += scnprintf(pos, end - pos, "%x,%x,%x,%x\n",
++				 rng->start_idx, rng->n_levels,
++				 rng->start_pwr, rng->pwr_step);
++	}
++
++end:
++	rv = simple_read_from_buffer(user_buf, count, ppos, buf, strlen(buf));
++	kfree(buf);
++	return rv;
++}
++
+ DEBUGFS_READONLY_FILE_OPS(hwflags);
+ DEBUGFS_READONLY_FILE_OPS(queues);
+ DEBUGFS_READONLY_FILE_OPS(misc);
++DEBUGFS_READONLY_FILE_OPS(tpc_support);
+ 
+ /* statistics stuff */
+ 
+@@ -673,6 +710,8 @@ void debugfs_hw_add(struct ieee80211_loc
+ 	debugfs_create_u32("aql_threshold", 0600,
+ 			   phyd, &local->aql_threshold);
+ 
++	DEBUGFS_ADD(tpc_support);
++
+ 	statsd = debugfs_create_dir("statistics", phyd);
+ 
+ 	/* if the dir failed, don't put all the other things into the root! */
