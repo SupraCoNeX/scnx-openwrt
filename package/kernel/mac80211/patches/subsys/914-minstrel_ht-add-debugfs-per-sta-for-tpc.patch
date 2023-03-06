@@ -1,0 +1,227 @@
+From 917c20b0f3d26f36068a0530cde45f2d29490463 Mon Sep 17 00:00:00 2001
+From: Jonas Jelonek <jelonek.jonas@gmail.com>
+Date: Wed, 8 Feb 2023 19:39:58 +0100
+Subject: [PATCH 7/7] mac80211: minstrel_ht - add debugfs per sta for
+ fixed-power
+
+Create a new debugfs entry in debugfs dir for each station to set a
+fixed power idx to be used for TPC. By writing a positive tx-power idx
+with 'fixed;<idx>' into this file, minstrel_ht applies this tx-power idx
+to each packet or each mrr stage, or puts it into the rate table,
+depending on what the hardware supports. By writing 'auto' to the file,
+minstrel will return to automatic mode (currently just passes '-1' as
+idx which indicates a driver shall use a default power).
+The debugfs entry will only be created if either SUPPORTS_TPC_PER_PACKET
+or SUPPORTS_TPC_PER_MRR is set.
+
+Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
+---
+ net/mac80211/rc80211_minstrel_ht.c         | 16 +++++
+ net/mac80211/rc80211_minstrel_ht.h         |  5 ++
+ net/mac80211/rc80211_minstrel_ht_debugfs.c | 81 ++++++++++++++++++++++
+ 3 files changed, 102 insertions(+)
+
+--- a/net/mac80211/rc80211_minstrel_ht.c
++++ b/net/mac80211/rc80211_minstrel_ht.c
+@@ -1470,6 +1470,14 @@ minstrel_ht_set_rate(struct minstrel_pri
+ 
+ 	ratetbl->rate[offset].idx = idx;
+ 	ratetbl->rate[offset].flags = flags;
++
++#ifdef CPTCFG_MAC80211_DEBUGFS
++	if (mi->txpwr_mode == NL80211_TX_POWER_FIXED && mi->txpower[offset] >= 0) {
++		ratetbl->rate[offset].txpower_idx = mi->txpower[offset];
++		return;
++	}
++#endif
++	ratetbl->rate[offset].txpower_idx = -1;
+ }
+ 
+ static inline int
+@@ -1599,10 +1607,17 @@ minstrel_ht_get_rate(void *priv, struct
+ 	info->flags |= mi->tx_flags;
+ 
+ #ifdef CPTCFG_MAC80211_DEBUGFS
++	if (mi->txpwr_mode == NL80211_TX_POWER_FIXED && mi->txpower[0] >= 0)
++		info->control.txpower_idx = mi->txpower[0];
++	else
++		info->control.txpower_idx = -1;
++
+ 	if (mp->fixed_rate_idx != -1)
+ 		return;
+ 
+ 	sampling_interval = mp->sampling_interval;
++#else
++	info->control.txpower_idx = -1;
+ #endif
+ 
+ 	/* Don't use EAPOL frames for sampling on non-mrr hw */
+@@ -1834,6 +1849,11 @@ minstrel_ht_update_caps(void *priv, stru
+ 	mi->use_short_preamble = test_sta_flag(sta_info, WLAN_STA_SHORT_PREAMBLE) &&
+ 				 sta_info->sdata->vif.bss_conf.use_short_preamble;
+ 
++#ifdef CPTCFG_MAC80211_DEBUGFS
++	/* Initialize with all -1 */
++	memset16(mi->txpower, U16_MAX, ARRAY_SIZE(mi->txpower));
++#endif
++
+ 	minstrel_ht_update_cck(mp, mi, sband, sta);
+ 	minstrel_ht_update_ofdm(mp, mi, sband, sta);
+ 
+--- a/net/mac80211/rc80211_minstrel_ht.h
++++ b/net/mac80211/rc80211_minstrel_ht.h
+@@ -216,6 +216,12 @@ struct minstrel_ht_sta {
+ 
+ 	/* MCS rate group info and statistics */
+ 	struct minstrel_mcs_group_data groups[MINSTREL_GROUPS_NB];
++
++#ifdef CPTCFG_MAC80211_DEBUGFS
++	/* enable fixed tx-power per STA */
++	enum nl80211_tx_power_setting txpwr_mode;
++	s16 txpower[IEEE80211_TX_RATE_TABLE_SIZE];
++#endif
+ };
+ 
+ void minstrel_ht_add_sta_debugfs(void *priv, void *priv_sta, struct dentry *dir);
+--- a/net/mac80211/rc80211_minstrel_ht_debugfs.c
++++ b/net/mac80211/rc80211_minstrel_ht_debugfs.c
+@@ -1,4 +1,5 @@
+ // SPDX-License-Identifier: GPL-2.0-only
++
+ /*
+  * Copyright (C) 2010 Felix Fietkau <nbd@openwrt.org>
+  */
+@@ -8,7 +9,10 @@
+ #include <linux/debugfs.h>
+ #include <linux/ieee80211.h>
+ #include <linux/export.h>
++#include <linux/string.h>
+ #include <net/mac80211.h>
++#include "ieee80211_i.h"
++#include "sta_info.h"
+ #include "rc80211_minstrel_ht.h"
+ 
+ struct minstrel_debugfs_info {
+@@ -326,11 +330,122 @@ static const struct file_operations mins
+ 	.llseek = no_llseek,
+ };
+ 
++static ssize_t
++minstrel_ht_debugfs_read_txpower(struct file *file, char __user *userbuf,
++				 size_t len, loff_t *ppos)
++{
++	struct minstrel_ht_sta *mi = file->private_data;
++	char buf[32] = {0};
++	int i, ofs = 0;
++
++	if (mi->txpwr_mode == NL80211_TX_POWER_FIXED) {
++		ofs += sprintf(buf, "fixed;");
++		for (i = 0; i < ARRAY_SIZE(mi->txpower) && mi->txpower[i] >= 0; i++) {
++			const char *fmt = (i == ARRAY_SIZE(mi->txpower) - 1)
++					  ? "%u" : "%u,";
++			ofs += sprintf(buf + ofs, fmt, mi->txpower[i]);
++		}
++		ofs += sprintf(buf + ofs, "\n");
++	} else
++		ofs += sprintf(buf, "auto\n");
++
++	return simple_read_from_buffer(userbuf, len, ppos, buf, ofs);
++}
++
++static int
++minstrel_ht_parse_power_list(struct ieee80211_hw *hw, s16 *dest, u8 dest_size,
++			     char *str, char *sep)
++{
++	char *arg;
++	s16 max_pwr_idx;
++	int txpwr, i, count = 0;
++
++	memset16(dest, 0, dest_size);
++
++	max_pwr_idx = ieee80211_hw_get_max_txpower_idx(hw);
++	for (i = 0; i < dest_size; i++) {
++		arg = strsep(&str, sep);
++		if (!arg)
++			break;
++
++		if (kstrtoint(arg, 10, &txpwr))
++			return -EINVAL;
++		if (txpwr > max_pwr_idx || txpwr < -1)
++			return -EINVAL;
++
++		dest[i] = (s16)txpwr;
++		count++;
++	}
++	return count;
++}
++
++static ssize_t
++minstrel_ht_debugfs_write_txpower(struct file *file, const char __user *userbuf,
++				  size_t len, loff_t *ppos)
++{
++	struct minstrel_ht_sta *mi = file->private_data;
++	struct ieee80211_hw *hw;
++	char buf[32] = {0};
++	char *mode, *args;
++	s16 txpwr[4] = {0};
++	int i, n_txpwr = 0;
++
++	if (len > sizeof(buf) - 1)
++		return -EINVAL;
++	if (copy_from_user(buf, userbuf, len))
++		return -EFAULT;
++
++	buf[sizeof(buf) - 1] = '\0';
++	args = buf;
++	mode = strsep(&args, ";");
++
++	if (!strncmp(mode, "auto", 4)) {
++		memset16(mi->txpower, U16_MAX, IEEE80211_TX_RATE_TABLE_SIZE);
++		mi->txpwr_mode = NL80211_TX_POWER_AUTOMATIC;
++	} else if (!strncmp(mode, "fixed", 5)) {
++		if (!args)
++			return -EINVAL;
++
++		hw = &container_of(mi->sta, struct sta_info, sta)->local->hw;
++		n_txpwr = minstrel_ht_parse_power_list(hw, txpwr, ARRAY_SIZE(txpwr),
++						       args, ",");
++		if (n_txpwr < 0)
++			return n_txpwr;
++		if (!n_txpwr)
++			return -EINVAL;
++
++		memset16(mi->txpower, U16_MAX, IEEE80211_TX_RATE_TABLE_SIZE);
++		for (i = 0; i < n_txpwr; i++)
++			mi->txpower[i] = txpwr[i];
++
++		mi->txpwr_mode = NL80211_TX_POWER_FIXED;
++	} else
++		return -EINVAL;
++
++	return len;
++}
++
++static const struct file_operations minstrel_ht_txpower_fops = {
++	.owner = THIS_MODULE,
++	.open = simple_open,
++	.read = minstrel_ht_debugfs_read_txpower,
++	.write = minstrel_ht_debugfs_write_txpower,
++	.llseek = no_llseek,
++};
++
+ void
+ minstrel_ht_add_sta_debugfs(void *priv, void *priv_sta, struct dentry *dir)
+ {
++	struct minstrel_priv *mp = priv;
++
+ 	debugfs_create_file("rc_stats", 0444, dir, priv_sta,
+ 			    &minstrel_ht_stat_fops);
+ 	debugfs_create_file("rc_stats_csv", 0444, dir, priv_sta,
+ 			    &minstrel_ht_stat_csv_fops);
++
++	if (ieee80211_hw_check(mp->hw, SUPPORTS_TPC_PER_PACKET) ||
++	    ieee80211_hw_check(mp->hw, SUPPORTS_TPC_PER_MRR)) {
++		debugfs_create_file("rc_txpower_mode", 0444, dir, priv_sta,
++				    &minstrel_ht_txpower_fops);
++	}
+ }
