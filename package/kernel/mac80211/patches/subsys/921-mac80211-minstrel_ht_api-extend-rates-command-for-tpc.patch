@@ -37,7 +37,7 @@
  	for (i = 0; i < min(n_rates, n_count); i++) {
  		rate = minstrel_ht_rate_from_str(mi, ratelist[i]);
  		if (rate < 0)
-@@ -399,6 +405,15 @@ minstrel_ht_set_rates(struct minstrel_pr
+@@ -399,10 +405,22 @@ minstrel_ht_set_rates(struct minstrel_pr
  		ratetbl->rate[i].count = count;
  		ratetbl->rate[i].count_rts = count;
  		ratetbl->rate[i].count_cts = count;
@@ -53,7 +53,14 @@
  	}
  	if (!i)
  		goto error;
-@@ -424,7 +439,7 @@ minstrel_ht_api_sta_cmd(struct minstrel_
+ 
++	for (; i < IEEE80211_TX_RATE_TABLE_SIZE; i++)
++		ratetbl->rate[i].txpower_idx = -1;
++
+ 	ratetbl = kmemdup(ratetbl, sizeof(*ratetbl), GFP_KERNEL);
+ 	if (!ratetbl)
+ 		return -ENOMEM;
+@@ -424,7 +442,7 @@ minstrel_ht_api_sta_cmd(struct minstrel_
  {
  	struct minstrel_ht_sta *mi;
  	uint8_t macaddr[ETH_ALEN];
@@ -62,7 +69,7 @@
  	int n_args;
  	int ret = -EINVAL;
  
-@@ -449,7 +464,7 @@ minstrel_ht_api_sta_cmd(struct minstrel_
+@@ -449,7 +467,7 @@ minstrel_ht_api_sta_cmd(struct minstrel_
  		ret = minstrel_ht_set_probe_rate(mi, args[1]);
  		break;
  	case STA_CMD_RATES:
