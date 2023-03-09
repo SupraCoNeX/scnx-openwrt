@@ -21,7 +21,7 @@
  				 rate_list[i],
 -				 info->status.rates[i].count);
 +				 info->status.rates[i].count,
-+				 txpwr_list[i]);
++				 (u16)(txpwr_list[i]));
  
  	for (; i < IEEE80211_TX_MAX_RATES; i++)
 -		ofs += scnprintf(txs + ofs, sizeof(txs) - ofs, ";ffff;0");
