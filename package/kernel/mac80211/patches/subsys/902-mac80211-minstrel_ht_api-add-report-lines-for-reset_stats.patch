@@ -1,0 +1,41 @@
+--- a/net/mac80211/rc80211_minstrel_ht_api.c
++++ b/net/mac80211/rc80211_minstrel_ht_api.c
+@@ -481,14 +481,18 @@ minstrel_ht_reset_stats(struct minstrel_
+ {
+ 	struct minstrel_ht_sta *mi;
+ 	uint8_t macaddr[ETH_ALEN];
+-	int err = 0;
++	char info[128] = {0};
++	int err = 0, len = 0;
+ 
+ 	rcu_read_lock();
+ 
+ 	if (!buf) {
+ 		list_for_each_entry(mi, &mp->stations, list)
+ 			minstrel_ht_reset_sta_rc_stats(mp, mi);
+-		goto out;
++
++		len = scnprintf(info, sizeof(info), "%llx;sta;stats_reset;all\n",
++				(unsigned long long)ktime_get_real_fast_ns());
++		goto report;
+ 	}
+ 
+ 	if (!mac_pton(buf, macaddr)) {
+@@ -503,7 +507,17 @@ minstrel_ht_reset_stats(struct minstrel_
+ 	}
+ 
+ 	minstrel_ht_reset_sta_rc_stats(mp, mi);
++	len = scnprintf(info, sizeof(info), "%llx;sta;stats_reset;%pM\n",
++			(unsigned long long)ktime_get_real_fast_ns(),
++			mi->sta->addr);
++
++report:
++	spin_lock_bh(&mp->relay_lock);
++
++	relay_write(mp->relay_ev, info, len);
++	relay_flush(mp->relay_ev);
+ 
++	spin_unlock_bh(&mp->relay_lock);
+ out:
+ 	rcu_read_unlock();
+ 
