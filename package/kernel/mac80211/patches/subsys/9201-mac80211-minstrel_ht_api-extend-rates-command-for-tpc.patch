@@ -3,9 +3,9 @@
 @@ -360,17 +360,18 @@ minstrel_ht_set_probe_rate(struct minstr
  
  static int
- minstrel_ht_set_rates(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
--		      char *rate_str, char *count_str)
-+		      char *rate_str, char *count_str, char* txpwr_str)
+ minstrel_ht_set_mrr(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
+-		    char *rate_str, char *count_str)
++		    char *rate_str, char *count_str, char *txpwr_str)
  {
  	struct ieee80211_sta_rates *ratetbl;
 +	struct ieee80211_hw *hw = mp->hw;
@@ -25,7 +25,7 @@
  
  	if (!rate_str || !count_str)
  		return -EINVAL;
-@@ -387,6 +388,11 @@ minstrel_ht_set_rates(struct minstrel_pr
+@@ -387,6 +388,11 @@ minstrel_ht_set_mrr(struct minstrel_priv
  				       rate_str, ",");
  	n_count = minstrel_ht_get_args(countlist, ARRAY_SIZE(countlist),
  				       count_str, ",");
@@ -37,7 +37,7 @@
  	for (i = 0; i < min(n_rates, n_count); i++) {
  		rate = minstrel_ht_rate_from_str(mi, ratelist[i]);
  		if (rate < 0)
-@@ -399,10 +405,22 @@ minstrel_ht_set_rates(struct minstrel_pr
+@@ -399,10 +405,22 @@ minstrel_ht_set_mrr(struct minstrel_priv
  		ratetbl->rate[i].count = count;
  		ratetbl->rate[i].count_rts = count;
  		ratetbl->rate[i].count_cts = count;
@@ -72,9 +72,9 @@
 @@ -449,7 +467,7 @@ minstrel_ht_api_sta_cmd(struct minstrel_
  		ret = minstrel_ht_set_probe_rate(mi, args[1]);
  		break;
- 	case STA_CMD_RATES:
--		ret = minstrel_ht_set_rates(mp, mi, args[1], args[2]);
-+		ret = minstrel_ht_set_rates(mp, mi, args[1], args[2], args[3]);
+ 	case STA_CMD_MRR:
+-		ret = minstrel_ht_set_mrr(mp, mi, args[1], args[2]);
++		ret = minstrel_ht_set_mrr(mp, mi, args[1], args[2], args[3]);
  		break;
  	}
  

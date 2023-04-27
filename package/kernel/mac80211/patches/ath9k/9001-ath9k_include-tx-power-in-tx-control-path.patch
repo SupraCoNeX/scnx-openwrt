@@ -111,11 +111,11 @@
  		if (use_stbc)
  			max_power = min_t(u8, ah->tx_power_stbc[rateidx],
 -					  fi->tx_power);
-+					  tpc_power);
++					  txpower);
  		else
  			max_power = min_t(u8, ah->tx_power[rateidx],
 -					  fi->tx_power);
-+					  tpc_power);
++					  txpower);
 +
 +		rpt_power = max_power;
  	} else {
