@@ -17,7 +17,7 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
 
 --- a/include/net/mac80211.h
 +++ b/include/net/mac80211.h
-@@ -2642,6 +2642,13 @@ struct ieee80211_txq {
+@@ -2644,6 +2644,13 @@ struct ieee80211_txq {
   * @IEEE80211_HW_MLO_MCAST_MULTI_LINK_TX: Hardware/driver handles transmitting
   *	multicast frames on all links, mac80211 should not do that.
   *
@@ -31,7 +31,7 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
   * @NUM_IEEE80211_HW_FLAGS: number of hardware flags, used for sizing arrays
   */
  enum ieee80211_hw_flags {
-@@ -2699,6 +2706,8 @@ enum ieee80211_hw_flags {
+@@ -2701,6 +2708,8 @@ enum ieee80211_hw_flags {
  	IEEE80211_HW_SUPPORTS_CONC_MON_RX_DECAP,
  	IEEE80211_HW_DETECTS_COLOR_COLLISION,
  	IEEE80211_HW_MLO_MCAST_MULTI_LINK_TX,
