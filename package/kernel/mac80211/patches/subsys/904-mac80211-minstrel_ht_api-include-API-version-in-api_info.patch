@@ -1,0 +1,19 @@
+--- a/net/mac80211/rc80211_minstrel_ht_api.c
++++ b/net/mac80211/rc80211_minstrel_ht_api.c
+@@ -8,6 +8,8 @@
+ #include <net/mac80211.h>
+ #include "rc80211_minstrel_ht.h"
+ 
++#define MINSTREL_HT_API_VERSION "1"
++
+ extern u8 sample_table[SAMPLE_COLUMNS][MCS_GROUP_RATES];
+ 
+ enum sta_cmd {
+@@ -39,6 +41,7 @@ static int
+ minstrel_ht_read_api_info(struct seq_file *s, void *data)
+ {
+ 	int i, j;
++	seq_printf(s, "version;%s\n", MINSTREL_HT_API_VERSION);
+ 
+ 	seq_printf(s, "#group;index;offset;type;nss;bw;gi");
+ 	for (i = 0; i < MCS_GROUP_RATES; i++)
