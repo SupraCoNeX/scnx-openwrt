@@ -5,40 +5,27 @@
  enum sta_cmd {
  	STA_CMD_PROBE,
 -	STA_CMD_RATES,
-+	STA_CMD_MRR,
++	STA_CMD_RC,
  };
  
  static void
-@@ -359,8 +359,8 @@ minstrel_ht_set_probe_rate(struct minstr
- }
- 
- static int
--minstrel_ht_set_rates(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
--		      char *rate_str, char *count_str)
-+minstrel_ht_set_mrr(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
-+		    char *rate_str, char *count_str)
- {
- 	struct ieee80211_sta_rates *ratetbl;
- 	unsigned int count;
-@@ -448,8 +448,8 @@ minstrel_ht_api_sta_cmd(struct minstrel_
+@@ -448,7 +448,7 @@ minstrel_ht_api_sta_cmd(struct minstrel_
  	case STA_CMD_PROBE:
  		ret = minstrel_ht_set_probe_rate(mi, args[1]);
  		break;
 -	case STA_CMD_RATES:
--		ret = minstrel_ht_set_rates(mp, mi, args[1], args[2]);
-+	case STA_CMD_MRR:
-+		ret = minstrel_ht_set_mrr(mp, mi, args[1], args[2]);
++	case STA_CMD_RC:
+ 		ret = minstrel_ht_set_rates(mp, mi, args[1], args[2]);
  		break;
  	}
- 
 @@ -563,8 +563,8 @@ minstrel_ht_control_write(struct file *f
  		minstrel_ht_api_set_manual(mp, false);
  	else if (!strcmp(cur, "reset_stats"))
  		err = minstrel_ht_reset_stats(mp, pos);
 -	else if (!strcmp(cur, "rates"))
 -		err = minstrel_ht_api_sta_cmd(mp, STA_CMD_RATES, pos);
-+	else if (!strcmp(cur, "mrr") || !strcmp(cur, "rates"))
-+		err = minstrel_ht_api_sta_cmd(mp, STA_CMD_MRR, pos);
++	else if (!strcmp(cur, "rc") || !strcmp(cur, "rates"))
++		err = minstrel_ht_api_sta_cmd(mp, STA_CMD_RC, pos);
  	else if (!strcmp(cur, "probe"))
  		err = minstrel_ht_api_sta_cmd(mp, STA_CMD_PROBE, pos);
  	else
