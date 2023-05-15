@@ -1,0 +1,27 @@
+--- a/net/mac80211/rc80211_minstrel_ht_api.c
++++ b/net/mac80211/rc80211_minstrel_ht_api.c
+@@ -148,6 +148,24 @@ minstrel_ht_read_phy_info(struct seq_fil
+ 
+ 	seq_printf(s, "\nrc_mode;%s\n", mp->manual ? "manual" : "auto");
+ 
++	if (ieee80211_hw_check(&local->hw, SUPPORTS_TPC_PER_PACKET)) {
++		seq_printf(s, "tpc;pkt");
++	} else if (ieee80211_hw_check(&local->hw, SUPPORTS_TPC_PER_MRR)) {
++		seq_printf(s, "tpc;mrr");
++	} else {
++		seq_printf(s, "tpc;not\n");
++		goto skip_tpc;
++	}
++
++	seq_printf(s, ";%u", local->hw.n_txpower_ranges);
++	for (i = 0; i < local->hw.n_txpower_ranges; i++) {
++		struct ieee80211_hw_txpower_range *rng = &local->hw.txpower_ranges[i];
++		seq_printf(s, ";%x,%x,%x,%x", rng->start_idx, rng->n_levels,
++			   rng->start_pwr, rng->pwr_step);
++	}
++	seq_printf(s, "\n");
++
++skip_tpc:
+ 	return 0;
+ }
+ 
