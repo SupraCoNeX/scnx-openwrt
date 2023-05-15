@@ -73,21 +73,21 @@
 +{
 +	struct ath_softc *sc = file->private_data;
 +	struct ath_hw *ah = sc->sc_ah;
-+	char buf[1024] = {0};
-+	unsigned int len = 0, size = 1024;
++	char buf[768] = {0};
++	unsigned int len = 0, size = 768;
 +
 +	if (!ah->tpc_enabled) {
 +		len += scnprintf(buf + len, size - len,
-+				 "TPC DISABLED, TABLE NOT INITIALISED");
++				 "TPC DISABLED, TABLE NOT INITIALISED\n");
 +		goto out;
 +	}
 +
-+	len += scnprintf(buf + len, size - len, "MAXIMUM TRANSMIT POWER INDEX PER RATE");
++	len += scnprintf(buf + len, size - len, "MAXIMUM TRANSMIT POWER INDEX PER RATE\n\n");
 +
 +	if (AR_SREV_9300_20_OR_LATER(ah))
-+		len += print_txpwr_table_stbc(ah, buf, size);
++		len += print_txpwr_table_stbc(ah, buf + len, size);
 +	else
-+		len += print_txpwr_table(ah, buf, size);
++		len += print_txpwr_table(ah, buf + len, size);
 +
 +out:
 +	return simple_read_from_buffer(user_buf, count, ppos, buf, len);
@@ -103,7 +103,7 @@
  static ssize_t read_file_nf_override(struct file *file,
  				     char __user *user_buf,
  				     size_t count, loff_t *ppos)
-@@ -1696,6 +1792,7 @@ int ath9k_init_debug(struct ath_hw *ah)
+@@ -1697,6 +1793,7 @@ int ath9k_init_debug(struct ath_hw *ah)
  			    sc, &fops_ackto);
  #endif
  	debugfs_create_file("tpc", 0600, sc->debug.debugfs_phy, sc, &fops_tpc);
