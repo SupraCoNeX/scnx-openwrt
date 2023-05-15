@@ -9,6 +9,15 @@
  };
  
  static void
+@@ -77,7 +77,7 @@ minstrel_ht_read_api_info(struct seq_fil
+ 	seq_printf(s, "\n");
+ 
+ 	seq_printf(s, "#reset_stats;macaddr\n");
+-	seq_printf(s, "#rates;macaddr;rates;counts\n");
++	seq_printf(s, "#rc;macaddr;rates;counts\n");
+ 	seq_printf(s, "#probe;macaddr;rate\n");
+ 
+ 	seq_printf(s, "#sample_table;cols;rows");
 @@ -448,7 +448,7 @@ minstrel_ht_api_sta_cmd(struct minstrel_
  	case STA_CMD_PROBE:
  		ret = minstrel_ht_set_probe_rate(mi, args[1]);
