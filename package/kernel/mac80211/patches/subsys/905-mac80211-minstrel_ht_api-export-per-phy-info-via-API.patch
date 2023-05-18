@@ -1,6 +1,6 @@
 --- a/net/mac80211/rc80211_minstrel_ht_api.c
 +++ b/net/mac80211/rc80211_minstrel_ht_api.c
-@@ -6,6 +6,8 @@
+@@ -8,6 +8,8 @@
  #include <linux/debugfs.h>
  #include <linux/relay.h>
  #include <net/mac80211.h>
@@ -8,8 +8,8 @@
 +#include "rate.h"
  #include "rc80211_minstrel_ht.h"
  
- #define MINSTREL_HT_API_VERSION "1"
-@@ -127,6 +129,33 @@ minstrel_ht_read_api_info(struct seq_fil
+ #define ORCA_VERSION "1"
+@@ -129,6 +131,33 @@ minstrel_ht_read_api_info(struct seq_fil
  	return 0;
  }
  
@@ -43,7 +43,7 @@
  static struct dentry *
  create_buf_file_cb(const char *filename, struct dentry *parent, umode_t mode,
  		   struct rchan_buf *buf, int *is_global)
-@@ -762,6 +791,8 @@ void minstrel_ht_add_debugfs_api(struct
+@@ -764,6 +793,8 @@ void minstrel_ht_add_debugfs_api(struct
  				  NULL);
  	debugfs_create_devm_seqfile(&hw->wiphy->dev, "api_info",
  				    dir, minstrel_ht_read_api_info);
