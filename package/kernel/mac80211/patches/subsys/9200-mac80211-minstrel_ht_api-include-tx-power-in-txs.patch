@@ -9,16 +9,7 @@
  	seq_printf(s, "\n");
  
  	seq_printf(s, "#rxs;macaddr;last_signal");
-@@ -82,7 +82,7 @@ minstrel_ht_read_api_info(struct seq_fil
- 	seq_printf(s, "\n");
- 
- 	seq_printf(s, "#reset_stats;macaddr\n");
--	seq_printf(s, "#rc;macaddr;rates;counts\n");
-+	seq_printf(s, "#rc;macaddr;rates;counts;tx_power\n");
- 	seq_printf(s, "#probe;macaddr;rate\n");
- 
- 	seq_printf(s, "#sample_table;cols;rows");
-@@ -663,9 +663,10 @@ void __minstrel_ht_report_tx_status(stru
+@@ -666,9 +666,10 @@ void __minstrel_ht_report_tx_status(stru
  				    struct minstrel_ht_sta *mi,
  				    struct ieee80211_tx_info *info,
  				    u16 *rate_list,
@@ -30,7 +21,7 @@
  	int ofs = 0;
  	int i;
  
-@@ -681,12 +682,13 @@ void __minstrel_ht_report_tx_status(stru
+@@ -684,12 +685,13 @@ void __minstrel_ht_report_tx_status(stru
  			 !!(info->flags & IEEE80211_TX_CTL_RATE_CTRL_PROBE));
  
  	for (i = 0; i < n_rates; i++)
