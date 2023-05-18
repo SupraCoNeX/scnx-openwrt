@@ -43,7 +43,7 @@
  static struct dentry *
  create_buf_file_cb(const char *filename, struct dentry *parent, umode_t mode,
  		   struct rchan_buf *buf, int *is_global)
-@@ -764,6 +793,8 @@ void minstrel_ht_add_debugfs_api(struct
+@@ -750,6 +779,8 @@ void minstrel_ht_add_debugfs_api(struct
  				  NULL);
  	debugfs_create_devm_seqfile(&hw->wiphy->dev, "api_info",
  				    dir, minstrel_ht_read_api_info);

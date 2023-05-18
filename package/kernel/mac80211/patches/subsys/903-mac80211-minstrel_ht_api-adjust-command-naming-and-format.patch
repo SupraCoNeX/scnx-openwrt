@@ -83,7 +83,7 @@
  		break;
  	}
  
-@@ -563,8 +566,8 @@ minstrel_ht_control_write(struct file *f
+@@ -549,8 +552,8 @@ minstrel_ht_control_write(struct file *f
  		minstrel_ht_api_set_manual(mp, false);
  	else if (!strcmp(cur, "reset_stats"))
  		err = minstrel_ht_reset_stats(mp, pos);

@@ -24,7 +24,7 @@
  
  	seq_printf(s, "#sample_table;cols;rows");
  	for (i = 0; i < SAMPLE_COLUMNS; i++)
-@@ -296,6 +296,7 @@ minstrel_ht_reset_sample_table(struct mi
+@@ -299,6 +299,7 @@ minstrel_ht_reset_sample_table(struct mi
  	mi->sample_seq = 0;
  	mi->user_sample_rate = -1;
  	mi->user_sample_count = 0;
@@ -32,7 +32,7 @@
  }
  
  static void
-@@ -383,11 +384,13 @@ minstrel_ht_rate_from_str(struct minstre
+@@ -386,11 +387,13 @@ minstrel_ht_rate_from_str(struct minstre
  }
  
  static int
@@ -49,7 +49,7 @@
  
  	if (!rate_str || !count_str)
  		return -EINVAL;
-@@ -399,8 +402,18 @@ minstrel_ht_set_probe_rate(struct minstr
+@@ -402,8 +405,18 @@ minstrel_ht_set_probe_rate(struct minstr
  	if (kstrtouint(count_str, 16, &count))
  		return -EINVAL;
  
@@ -68,7 +68,7 @@
  	return 0;
  }
  
-@@ -409,11 +422,12 @@ minstrel_ht_set_rates(struct minstrel_pr
+@@ -412,11 +425,12 @@ minstrel_ht_set_rates(struct minstrel_pr
  		      char **stages, unsigned int n_stages)
  {
  	struct ieee80211_sta_rates *ratetbl;
@@ -83,7 +83,7 @@
  
  	if (!stages || !stages[0] || !n_stages)
  		return -EINVAL;
-@@ -425,6 +439,8 @@ minstrel_ht_set_rates(struct minstrel_pr
+@@ -428,6 +442,8 @@ minstrel_ht_set_rates(struct minstrel_pr
  	if (!ratetbl)
  		return -ENOMEM;
  
@@ -92,7 +92,7 @@
  	memset(ratetbl, 0, sizeof(*ratetbl));
  	for (i = 0; i < n_stages; i++) {
  		n_parts = minstrel_ht_get_args(parts, ARRAY_SIZE(parts),
-@@ -443,10 +459,22 @@ minstrel_ht_set_rates(struct minstrel_pr
+@@ -446,10 +462,22 @@ minstrel_ht_set_rates(struct minstrel_pr
  		ratetbl->rate[i].count = count;
  		ratetbl->rate[i].count_rts = count;
  		ratetbl->rate[i].count_cts = count;
@@ -115,7 +115,7 @@
  	ratetbl = kmemdup(ratetbl, sizeof(*ratetbl), GFP_KERNEL);
  	if (!ratetbl)
  		return -ENOMEM;
-@@ -468,7 +496,7 @@ minstrel_ht_api_sta_cmd(struct minstrel_
+@@ -471,7 +499,7 @@ minstrel_ht_api_sta_cmd(struct minstrel_
  {
  	struct minstrel_ht_sta *mi;
  	uint8_t macaddr[ETH_ALEN];
@@ -124,7 +124,7 @@
  	int n_args;
  	int ret = -EINVAL;
  
-@@ -490,9 +518,9 @@ minstrel_ht_api_sta_cmd(struct minstrel_
+@@ -493,9 +521,9 @@ minstrel_ht_api_sta_cmd(struct minstrel_
  
  	switch (cmd) {
  	case STA_CMD_PROBE:
@@ -136,10 +136,10 @@
  		ret = minstrel_ht_set_rates(mp, mi, &args[1], n_args - 1);
  		break;
  	}
-@@ -607,8 +635,8 @@ minstrel_ht_control_write(struct file *f
- 		minstrel_ht_api_set_manual(mp, false);
- 	else if (!strcmp(cur, "reset_stats"))
- 		err = minstrel_ht_reset_stats(mp, pos);
+@@ -623,8 +651,8 @@ minstrel_ht_control_write(struct file *f
+ 	err = 0;
+ 	if (!strcmp(cur, "dump"))
+ 		minstrel_ht_dump_stations(mp, "dump");
 -	else if (!strcmp(cur, "set_rates") || !strcmp(cur, "rates"))
 -		err = minstrel_ht_api_sta_cmd(mp, STA_CMD_RC, pos);
 +	else if (!strcmp(cur, "set_rates_power") || !strcmp(cur, "rates"))
