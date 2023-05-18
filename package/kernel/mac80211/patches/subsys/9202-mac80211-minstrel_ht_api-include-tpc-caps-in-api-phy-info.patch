@@ -1,6 +1,6 @@
 --- a/net/mac80211/rc80211_minstrel_ht_api.c
 +++ b/net/mac80211/rc80211_minstrel_ht_api.c
-@@ -148,6 +148,24 @@ minstrel_ht_read_phy_info(struct seq_fil
+@@ -153,6 +153,24 @@ minstrel_ht_read_phy_info(struct seq_fil
  
  	seq_printf(s, "\nrc_mode;%s\n", mp->manual ? "manual" : "auto");
  
