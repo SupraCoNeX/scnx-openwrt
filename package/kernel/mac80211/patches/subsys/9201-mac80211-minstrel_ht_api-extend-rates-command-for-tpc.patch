@@ -1,6 +1,6 @@
 --- a/net/mac80211/rc80211_minstrel_ht_api.c
 +++ b/net/mac80211/rc80211_minstrel_ht_api.c
-@@ -400,11 +400,12 @@ minstrel_ht_set_rates(struct minstrel_pr
+@@ -402,11 +402,12 @@ minstrel_ht_set_rates(struct minstrel_pr
  		      char **stages, unsigned int n_stages)
  {
  	struct ieee80211_sta_rates *ratetbl;
@@ -15,7 +15,7 @@
  
  	if (!stages || !stages[0] || !n_stages)
  		return -EINVAL;
-@@ -416,6 +417,8 @@ minstrel_ht_set_rates(struct minstrel_pr
+@@ -418,6 +419,8 @@ minstrel_ht_set_rates(struct minstrel_pr
  	if (!ratetbl)
  		return -ENOMEM;
  
@@ -24,7 +24,7 @@
  	memset(ratetbl, 0, sizeof(*ratetbl));
  	for (i = 0; i < n_stages; i++) {
  		n_parts = minstrel_ht_get_args(parts, ARRAY_SIZE(parts),
-@@ -434,10 +437,22 @@ minstrel_ht_set_rates(struct minstrel_pr
+@@ -436,10 +439,22 @@ minstrel_ht_set_rates(struct minstrel_pr
  		ratetbl->rate[i].count = count;
  		ratetbl->rate[i].count_rts = count;
  		ratetbl->rate[i].count_cts = count;
@@ -47,7 +47,7 @@
  	ratetbl = kmemdup(ratetbl, sizeof(*ratetbl), GFP_KERNEL);
  	if (!ratetbl)
  		return -ENOMEM;
-@@ -459,7 +474,7 @@ minstrel_ht_api_sta_cmd(struct minstrel_
+@@ -461,7 +476,7 @@ minstrel_ht_api_sta_cmd(struct minstrel_
  {
  	struct minstrel_ht_sta *mi;
  	uint8_t macaddr[ETH_ALEN];
