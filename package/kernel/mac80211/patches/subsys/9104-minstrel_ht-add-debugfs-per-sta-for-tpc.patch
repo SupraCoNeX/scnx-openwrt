@@ -38,7 +38,7 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
  }
  
  static inline int
-@@ -1599,10 +1607,17 @@ minstrel_ht_get_rate(void *priv, struct
+@@ -1600,10 +1608,17 @@ minstrel_ht_get_rate(void *priv, struct
  	info->flags |= mi->tx_flags;
  
  #ifdef CPTCFG_MAC80211_DEBUGFS
@@ -56,7 +56,7 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
  #endif
  
  	/* Don't use EAPOL frames for sampling on non-mrr hw */
-@@ -1834,6 +1849,11 @@ minstrel_ht_update_caps(void *priv, stru
+@@ -1840,6 +1855,11 @@ minstrel_ht_update_caps(void *priv, stru
  	mi->use_short_preamble = test_sta_flag(sta_info, WLAN_STA_SHORT_PREAMBLE) &&
  				 sta_info->sdata->vif.bss_conf.use_short_preamble;
  
@@ -70,7 +70,7 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
  
 --- a/net/mac80211/rc80211_minstrel_ht.h
 +++ b/net/mac80211/rc80211_minstrel_ht.h
-@@ -216,6 +216,12 @@ struct minstrel_ht_sta {
+@@ -217,6 +217,12 @@ struct minstrel_ht_sta {
  
  	/* MCS rate group info and statistics */
  	struct minstrel_mcs_group_data groups[MINSTREL_GROUPS_NB];

@@ -1,0 +1,97 @@
+--- a/net/mac80211/rc80211_minstrel_ht_api.c
++++ b/net/mac80211/rc80211_minstrel_ht_api.c
+@@ -90,7 +90,7 @@ minstrel_ht_read_api_info(struct seq_fil
+ 		seq_printf(s, ";rate%d,count%d", i, i);
+ 	seq_printf(s, "\n");
+ 
+-	seq_printf(s, "#probe;macaddr;rate\n");
++	seq_printf(s, "#probe;macaddr;rate;count\n");
+ 
+ 	seq_printf(s, "#sample_table;cols;rows");
+ 	for (i = 0; i < SAMPLE_COLUMNS; i++)
+@@ -295,6 +295,7 @@ minstrel_ht_reset_sample_table(struct mi
+ 
+ 	mi->sample_seq = 0;
+ 	mi->user_sample_rate = -1;
++	mi->user_sample_count = 0;
+ }
+ 
+ static void
+@@ -382,18 +383,24 @@ minstrel_ht_rate_from_str(struct minstre
+ }
+ 
+ static int
+-minstrel_ht_set_probe_rate(struct minstrel_ht_sta *mi, const char *rate_str)
++minstrel_ht_set_probe_rate(struct minstrel_ht_sta *mi, const char *rate_str,
++			   const char *count_str)
+ {
++	unsigned int count;
+ 	int rate;
+ 
+-	if (!rate_str)
++	if (!rate_str || !count_str)
+ 		return -EINVAL;
+ 
+ 	rate = minstrel_ht_rate_from_str(mi, rate_str);
+ 	if (rate < 0)
+ 		return rate;
+ 
++	if (kstrtouint(count_str, 16, &count))
++		return -EINVAL;
++
+ 	mi->user_sample_rate = rate;
++	mi->user_sample_count = count;
+ 	return 0;
+ }
+ 
+@@ -483,7 +490,7 @@ minstrel_ht_api_sta_cmd(struct minstrel_
+ 
+ 	switch (cmd) {
+ 	case STA_CMD_PROBE:
+-		ret = minstrel_ht_set_probe_rate(mi, args[1]);
++		ret = minstrel_ht_set_probe_rate(mi, args[1], args[2]);
+ 		break;
+ 	case STA_CMD_RC:
+ 		ret = minstrel_ht_set_rates(mp, mi, &args[1], n_args - 1);
+--- a/net/mac80211/rc80211_minstrel_ht.c
++++ b/net/mac80211/rc80211_minstrel_ht.c
+@@ -1595,6 +1595,7 @@ minstrel_ht_get_rate(void *priv, struct
+ 	struct minstrel_priv *mp = priv;
+ 	u16 sample_idx;
+ 	u32 sampling_interval = MINSTREL_SAMPLE_INTERVAL;
++	u8 sample_count = 1;
+ 
+ 	info->flags |= mi->tx_flags;
+ 
+@@ -1612,7 +1613,12 @@ minstrel_ht_get_rate(void *priv, struct
+ 
+ 	if (minstrel_ht_manual_mode(mp) && mi->user_sample_rate != -1) {
+ 		sample_idx = mi->user_sample_rate;
++		if (mi->user_sample_count != 0)
++			sample_count = mi->user_sample_count;
++
+ 		mi->user_sample_rate = -1;
++		mi->user_sample_count = 0;
++
+ 		goto set_rate;
+ 	}
+ 
+@@ -1636,7 +1642,7 @@ set_rate:
+ 		return;
+ 
+ 	info->flags |= IEEE80211_TX_CTL_RATE_CTRL_PROBE;
+-	rate->count = 1;
++	rate->count = sample_count;
+ 
+ 	if (sample_group == &minstrel_mcs_groups[MINSTREL_CCK_GROUP]) {
+ 		int idx = sample_idx % ARRAY_SIZE(mp->cck_rates);
+--- a/net/mac80211/rc80211_minstrel_ht.h
++++ b/net/mac80211/rc80211_minstrel_ht.h
+@@ -172,6 +172,7 @@ struct minstrel_ht_sta {
+ #ifdef CPTCFG_MAC80211_RC_MINSTREL_DEBUGFS_API
+ 	struct list_head list;
+ 	u32 user_sample_rate;
++	u8 user_sample_count;
+ 	struct ieee80211_sta_rates *ratetbl;
+ #endif
+ 	struct ieee80211_sta *sta;
