@@ -72,6 +72,15 @@
  			goto error;
  
  		minstrel_ht_set_rate(mp, mi, ratetbl, i, rate);
+@@ -424,7 +427,7 @@ minstrel_ht_api_sta_cmd(struct minstrel_
+ {
+ 	struct minstrel_ht_sta *mi;
+ 	uint8_t macaddr[ETH_ALEN];
+-	char *args[3];
++	char *args[5];
+ 	int n_args;
+ 	int ret = -EINVAL;
+ 
 @@ -448,8 +451,8 @@ minstrel_ht_api_sta_cmd(struct minstrel_
  	case STA_CMD_PROBE:
  		ret = minstrel_ht_set_probe_rate(mi, args[1]);
