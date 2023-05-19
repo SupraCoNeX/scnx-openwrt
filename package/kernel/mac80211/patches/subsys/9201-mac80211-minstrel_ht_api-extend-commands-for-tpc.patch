@@ -115,15 +115,6 @@
  	ratetbl = kmemdup(ratetbl, sizeof(*ratetbl), GFP_KERNEL);
  	if (!ratetbl)
  		return -ENOMEM;
-@@ -471,7 +499,7 @@ minstrel_ht_api_sta_cmd(struct minstrel_
- {
- 	struct minstrel_ht_sta *mi;
- 	uint8_t macaddr[ETH_ALEN];
--	char *args[3];
-+	char *args[4] = {0};
- 	int n_args;
- 	int ret = -EINVAL;
- 
 @@ -493,9 +521,9 @@ minstrel_ht_api_sta_cmd(struct minstrel_
  
  	switch (cmd) {
