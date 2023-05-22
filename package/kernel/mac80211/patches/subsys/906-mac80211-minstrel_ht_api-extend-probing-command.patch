@@ -85,6 +85,14 @@
  
  	if (sample_group == &minstrel_mcs_groups[MINSTREL_CCK_GROUP]) {
  		int idx = sample_idx % ARRAY_SIZE(mp->cck_rates);
+@@ -1884,6 +1890,7 @@ minstrel_ht_alloc_sta(void *priv, struct
+ #ifdef CPTCFG_MAC80211_RC_MINSTREL_DEBUGFS_API
+ 	INIT_LIST_HEAD(&mi->list);
+ 	mi->user_sample_rate = -1;
++	mi->user_sample_count = 0;
+ #endif
+ 
+ 	return mi;
 --- a/net/mac80211/rc80211_minstrel_ht.h
 +++ b/net/mac80211/rc80211_minstrel_ht.h
 @@ -172,6 +172,7 @@ struct minstrel_ht_sta {

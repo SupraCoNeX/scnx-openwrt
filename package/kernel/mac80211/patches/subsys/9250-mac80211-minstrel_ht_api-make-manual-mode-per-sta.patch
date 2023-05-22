@@ -389,7 +389,7 @@
  		if (mi->ratetbl) {
  			rates = kmemdup(mi->ratetbl, sizeof(*rates), GFP_ATOMIC);
  			if (rates)
-@@ -1576,7 +1576,7 @@ minstrel_ht_get_sample_rate(struct minst
+@@ -1583,7 +1583,7 @@ minstrel_ht_get_sample_rate(struct minst
  {
  	u8 seq;
  
@@ -398,7 +398,7 @@
  		seq = mi->sample_seq;
  		mi->sample_seq = (seq + 1) % ARRAY_SIZE(minstrel_sample_seq);
  		seq = minstrel_sample_seq[seq];
-@@ -1615,7 +1615,7 @@ minstrel_ht_get_rate(void *priv, struct
+@@ -1622,7 +1622,7 @@ minstrel_ht_get_rate(void *priv, struct
  	    (info->control.flags & IEEE80211_TX_CTRL_PORT_CTRL_PROTO))
  		return;
  
