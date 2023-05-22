@@ -71,7 +71,7 @@
  		/*
 --- a/net/mac80211/rc80211_minstrel_ht.h
 +++ b/net/mac80211/rc80211_minstrel_ht.h
-@@ -233,7 +233,7 @@ void minstrel_ht_sta_remove(struct minst
+@@ -227,7 +227,7 @@ void minstrel_ht_sta_remove(struct minst
  void __minstrel_ht_report_tx_status(struct minstrel_priv *mp,
  				    struct minstrel_ht_sta *mi,
  				    struct ieee80211_tx_info *info,
@@ -80,7 +80,7 @@
  void __minstrel_ht_report_rx_status(struct minstrel_priv *mp, u8 *addr,
                                      int last_signal, u8 chain_status,
                                      s8 *chain_signal);
-@@ -271,13 +271,14 @@ static inline void
+@@ -265,13 +265,14 @@ static inline void
  minstrel_ht_report_tx_status(struct minstrel_priv *mp,
  			     struct minstrel_ht_sta *mi,
  			     struct ieee80211_tx_info *info,
