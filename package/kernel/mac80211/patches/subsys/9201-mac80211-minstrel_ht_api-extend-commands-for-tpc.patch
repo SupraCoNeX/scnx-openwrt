@@ -140,15 +140,7 @@
  	else
 --- a/net/mac80211/rc80211_minstrel_ht.c
 +++ b/net/mac80211/rc80211_minstrel_ht.c
-@@ -1597,6 +1597,7 @@ minstrel_ht_get_rate(void *priv, struct
- 	struct minstrel_ht_sta *mi = priv_sta;
- 	struct minstrel_priv *mp = priv;
- 	u16 sample_idx;
-+	s16 sample_txpower = -1;
- 	u32 sampling_interval = MINSTREL_SAMPLE_INTERVAL;
- 	u8 sample_count = 1;
- 
-@@ -1616,11 +1617,13 @@ minstrel_ht_get_rate(void *priv, struct
+@@ -1624,11 +1624,13 @@ minstrel_ht_get_rate(void *priv, struct
  
  	if (minstrel_ht_manual_mode(mp) && mi->user_sample_rate != -1) {
  		sample_idx = mi->user_sample_rate;
@@ -162,14 +154,14 @@
  
  		goto set_rate;
  	}
-@@ -1661,6 +1664,7 @@ set_rate:
- 	}
+@@ -1904,6 +1906,7 @@ minstrel_ht_alloc_sta(void *priv, struct
+ 	INIT_LIST_HEAD(&mi->list);
+ 	mi->user_sample_rate = -1;
+ 	mi->user_sample_count = 0;
++	mi->user_sample_txpower = -1;
+ #endif
  
- 	rate->flags = sample_group->flags;
-+	info->control.txpower_idx = sample_txpower;
- }
- 
- static void
+ 	return mi;
 --- a/net/mac80211/rc80211_minstrel_ht.h
 +++ b/net/mac80211/rc80211_minstrel_ht.h
 @@ -172,6 +172,7 @@ struct minstrel_ht_sta {
