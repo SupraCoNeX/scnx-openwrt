@@ -16,11 +16,12 @@
 -	seq_printf(s, "#set_rates;macaddr");
 +	seq_printf(s, "#set_rates_power;macaddr");
  	for (i = 0; i < IEEE80211_TX_MAX_RATES; i++)
- 		seq_printf(s, ";rate%d,count%d", i, i);
+-		seq_printf(s, ";rate%d,count%d", i, i);
++		seq_printf(s, ";rate%d,count%d,txpwr%d", i, i, i);
  	seq_printf(s, "\n");
  
 -	seq_printf(s, "#probe;macaddr;rate;count\n");
-+	seq_printf(s, "#probe;macaddr;rate;count;txpower\n");
++	seq_printf(s, "#probe;macaddr;rate;count;txpwr\n");
  
  	seq_printf(s, "#sample_table;cols;rows");
  	for (i = 0; i < SAMPLE_COLUMNS; i++)
