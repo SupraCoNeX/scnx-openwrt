@@ -1,6 +1,6 @@
 --- a/net/mac80211/rc80211_minstrel_ht_api.c
 +++ b/net/mac80211/rc80211_minstrel_ht_api.c
-@@ -903,7 +903,7 @@ void __minstrel_ht_report_tx_status(stru
+@@ -902,7 +902,7 @@ void __minstrel_ht_report_tx_status(stru
  				 (u16)(txpwr_list[i]));
  
  	for (; i < IEEE80211_TX_MAX_RATES; i++)
