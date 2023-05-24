@@ -484,16 +484,17 @@
  		break;
  	case STA_CMD_RESET_STATS:
  		minstrel_ht_api_sta_reset_rc_stats(mp, mi);
-@@ -585,7 +664,7 @@ minstrel_ht_api_sta_cmd(struct minstrel_
+@@ -585,7 +664,8 @@ minstrel_ht_api_sta_cmd(struct minstrel_
  }
  
  static int
--minstrel_ht_execute_for_all(struct minstrel_priv *mp, enum api_cmd cmd)
-+minstrel_ht_execute_for_all(struct minstrel_priv *mp, enum api_cmd cmd, char *args)
+-minstrel_ht_api_exec_cmd_for_all(struct minstrel_priv *mp, enum api_cmd cmd)
++minstrel_ht_api_exec_cmd_for_all(struct minstrel_priv *mp, enum api_cmd cmd,
++				 char *args)
  {
  	struct minstrel_ht_sta *mi;
  	int ret = 0;
-@@ -597,13 +676,13 @@ minstrel_ht_execute_for_all(struct minst
+@@ -597,13 +677,13 @@ minstrel_ht_api_exec_cmd_for_all(struct
  		list_for_each_entry_rcu(mi, &mp->stations, list)
  			minstrel_ht_api_sta_reset_rc_stats(mp, mi);
  		break;
@@ -511,7 +512,7 @@
  		break;
  	default:
  		ret = -EPERM;
-@@ -628,16 +707,19 @@ minstrel_ht_execute(struct minstrel_priv
+@@ -628,11 +708,12 @@ minstrel_ht_api_exec_cmd(struct minstrel
  	case PHY_CMD_DUMP:
  		minstrel_ht_dump_stations(mp, "dump");
  		break;
@@ -521,20 +522,13 @@
 +	case STA_CMD_TPC_MODE:
  	case STA_CMD_RESET_STATS:
  		if (args && !strncmp(args, "all", 3)) {
--			err = minstrel_ht_execute_for_all(mp, cmd);
+-			err = minstrel_ht_api_exec_cmd_for_all(mp, cmd);
 +			strsep(&args, ";");
-+			err = minstrel_ht_execute_for_all(mp, cmd, args);
++			err = minstrel_ht_api_exec_cmd_for_all(mp, cmd, args);
  			break;
  		}
  		fallthrough;
- 	case STA_CMD_PROBE:
- 	case STA_CMD_TPRC:
-+	case STA_CMD_TPC:
-+	case STA_CMD_RC:
- 		err = minstrel_ht_api_sta_cmd(mp, cmd, args);
- 		break;
- 	default:
-@@ -705,6 +787,12 @@ minstrel_ht_control_write(struct file *f
+@@ -705,6 +786,12 @@ minstrel_ht_control_write(struct file *f
  	if (!strcmp(cur, "set_rates_power") || !strcmp(cur, "rates")) {
  		cmd = STA_CMD_TPRC;
  		echo = false;
@@ -547,7 +541,7 @@
  	} else if (!strcmp(cur, "probe")) {
  		cmd = STA_CMD_PROBE;
  		echo = false;
-@@ -715,10 +803,10 @@ minstrel_ht_control_write(struct file *f
+@@ -715,10 +802,10 @@ minstrel_ht_control_write(struct file *f
  		cmd = PHY_CMD_START;
  	} else if (!strcmp(cur, "stop")) {
  		cmd = PHY_CMD_STOP;
@@ -562,7 +556,7 @@
  	} else if (!strcmp(cur, "reset_stats")) {
  		cmd = STA_CMD_RESET_STATS;
  	} else {
-@@ -765,6 +853,7 @@ void minstrel_ht_sta_remove(struct minst
+@@ -765,6 +852,7 @@ void minstrel_ht_sta_remove(struct minst
  
  	list_del_rcu(&mi->list);
  	INIT_LIST_HEAD_RCU(&mi->list);

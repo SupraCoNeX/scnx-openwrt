@@ -200,7 +200,7 @@
 -
  static int
 -minstrel_ht_reset_stats(struct minstrel_priv *mp, char *buf)
-+minstrel_ht_execute_for_all(struct minstrel_priv *mp, enum api_cmd cmd)
++minstrel_ht_api_exec_cmd_for_all(struct minstrel_priv *mp, enum api_cmd cmd)
  {
  	struct minstrel_ht_sta *mi;
 -	uint8_t macaddr[ETH_ALEN];
@@ -246,7 +246,7 @@
  
 -	minstrel_ht_reset_sta_rc_stats(mp, mi);
 +static int
-+minstrel_ht_execute(struct minstrel_priv *mp, enum api_cmd cmd, char *args)
++minstrel_ht_api_exec_cmd(struct minstrel_priv *mp, enum api_cmd cmd, char *args)
 +{
 +	int err = 0;
  
@@ -266,7 +266,7 @@
 +	case STA_CMD_MANUAL:
 +	case STA_CMD_RESET_STATS:
 +		if (args && !strncmp(args, "all", 3)) {
-+			err = minstrel_ht_execute_for_all(mp, cmd);
++			err = minstrel_ht_api_exec_cmd_for_all(mp, cmd);
 +			break;
 +		}
 +		fallthrough;
@@ -283,8 +283,8 @@
  
  static int
 -minstrel_ht_execute_and_echo(struct minstrel_priv *mp, char *cmd, char *args)
-+minstrel_ht_execute_and_echo(struct minstrel_priv *mp, enum api_cmd cmd,
-+			     char* cmd_str, char *args)
++minstrel_ht_api_exec_and_echo_cmd(struct minstrel_priv *mp, enum api_cmd cmd,
++				  char* cmd_str, char *args)
  {
  	char buf[96];
  	int err = 0, len;
@@ -311,7 +311,7 @@
 -	else
 -		err = -EINVAL;
 -
-+	err = minstrel_ht_execute(mp, cmd, args);
++	err = minstrel_ht_api_exec_cmd(mp, cmd, args);
  	if (err)
  		return err;
  
@@ -364,8 +364,8 @@
 +		return -EINVAL;
 +	}
  
-+	err = (echo) ? minstrel_ht_execute_and_echo(mp, cmd, cur, pos)
-+		     : minstrel_ht_execute(mp, cmd, pos);
++	err = (echo) ? minstrel_ht_api_exec_and_echo_cmd(mp, cmd, cur, pos)
++		     : minstrel_ht_api_exec_cmd(mp, cmd, pos);
  	if (err)
  		return err;
  
