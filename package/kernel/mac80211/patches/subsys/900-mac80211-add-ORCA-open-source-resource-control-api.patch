@@ -211,7 +211,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  minstrel_ht_set_rate(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
                       struct ieee80211_sta_rates *ratetbl, int offset, int index)
  {
-@@ -1506,12 +1530,25 @@ minstrel_ht_get_max_amsdu_len(struct min
+@@ -1506,12 +1530,22 @@ minstrel_ht_get_max_amsdu_len(struct min
  }
  
  static void
@@ -224,21 +224,18 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  	int max_rates = min_t(int, mp->hw->max_rates, IEEE80211_TX_RATE_TABLE_SIZE);
  
 +	if (minstrel_ht_manual_mode(mp) && !force) {
-+		spin_lock_bh(&mi->lock);
 +		if (mi->ratetbl) {
 +			rates = kmemdup(mi->ratetbl, sizeof(*rates), GFP_ATOMIC);
 +			if (rates)
 +				rate_control_set_rates(mp->hw, mi->sta, rates);
 +		}
-+		spin_unlock_bh(&mi->lock);
-+
 +		return;
 +	}
 +
  	rates = kzalloc(sizeof(*rates), GFP_ATOMIC);
  	if (!rates)
  		return;
-@@ -1539,7 +1576,7 @@ minstrel_ht_get_sample_rate(struct minst
+@@ -1539,7 +1573,7 @@ minstrel_ht_get_sample_rate(struct minst
  {
  	u8 seq;
  
@@ -247,11 +244,12 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  		seq = mi->sample_seq;
  		mi->sample_seq = (seq + 1) % ARRAY_SIZE(minstrel_sample_seq);
  		seq = minstrel_sample_seq[seq];
-@@ -1560,12 +1597,15 @@ minstrel_ht_get_rate(void *priv, struct
+@@ -1560,12 +1594,16 @@ minstrel_ht_get_rate(void *priv, struct
  	struct minstrel_ht_sta *mi = priv_sta;
  	struct minstrel_priv *mp = priv;
  	u16 sample_idx;
 +	u32 sampling_interval = MINSTREL_SAMPLE_INTERVAL;
++	u8 sample_count = 1;
  
  	info->flags |= mi->tx_flags;
  
@@ -263,13 +261,18 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  #endif
  
  	/* Don't use EAPOL frames for sampling on non-mrr hw */
-@@ -1573,14 +1613,24 @@ minstrel_ht_get_rate(void *priv, struct
+@@ -1573,14 +1611,29 @@ minstrel_ht_get_rate(void *priv, struct
  	    (info->control.flags & IEEE80211_TX_CTRL_PORT_CTRL_PROTO))
  		return;
  
 +	if (minstrel_ht_manual_mode(mp) && mi->user_sample_rate != -1) {
 +		sample_idx = mi->user_sample_rate;
++		if (mi->user_sample_count != 0)
++			sample_count = mi->user_sample_count;
++
 +		mi->user_sample_rate = -1;
++		mi->user_sample_count = 0;
++
 +		goto set_rate;
 +	}
 +
@@ -289,7 +292,16 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  	sample_group = &minstrel_mcs_groups[MI_RATE_GROUP(sample_idx)];
  	sample_idx = MI_RATE_IDX(sample_idx);
  
-@@ -1679,7 +1729,7 @@ minstrel_ht_update_caps(void *priv, stru
+@@ -1589,7 +1642,7 @@ minstrel_ht_get_rate(void *priv, struct
+ 		return;
+ 
+ 	info->flags |= IEEE80211_TX_CTL_RATE_CTRL_PROBE;
+-	rate->count = 1;
++	rate->count = sample_count;
+ 
+ 	if (sample_group == &minstrel_mcs_groups[MINSTREL_CCK_GROUP]) {
+ 		int idx = sample_idx % ARRAY_SIZE(mp->cck_rates);
+@@ -1679,7 +1732,7 @@ minstrel_ht_update_caps(void *priv, stru
  	else
  		use_vht = 0;
  
@@ -298,7 +310,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  
  	mi->sta = sta;
  	mi->band = sband->band;
-@@ -1792,7 +1842,11 @@ minstrel_ht_update_caps(void *priv, stru
+@@ -1792,7 +1845,11 @@ minstrel_ht_update_caps(void *priv, stru
  
  	/* create an initial rate table with the lowest supported rates */
  	minstrel_ht_update_stats(mp, mi);
@@ -311,7 +323,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  }
  
  static void
-@@ -1828,12 +1882,20 @@ minstrel_ht_alloc_sta(void *priv, struct
+@@ -1828,12 +1885,21 @@ minstrel_ht_alloc_sta(void *priv, struct
  			max_rates = sband->n_bitrates;
  	}
  
@@ -321,6 +333,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
 +#ifdef CPTCFG_MAC80211_RC_MINSTREL_DEBUGFS_API
 +	INIT_LIST_HEAD(&mi->list);
 +	mi->user_sample_rate = -1;
++	mi->user_sample_count = 0;
 +#endif
 +
 +	return mi;
@@ -333,7 +346,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  	kfree(priv_sta);
  }
  
-@@ -1927,6 +1989,9 @@ minstrel_ht_alloc(struct ieee80211_hw *h
+@@ -1927,6 +1993,9 @@ minstrel_ht_alloc(struct ieee80211_hw *h
  
  	mp->hw = hw;
  	mp->update_interval = HZ / 20;
@@ -343,7 +356,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  
  	minstrel_ht_init_cck_rates(mp);
  	for (i = 0; i < ARRAY_SIZE(mp->hw->wiphy->bands); i++)
-@@ -1936,6 +2001,41 @@ minstrel_ht_alloc(struct ieee80211_hw *h
+@@ -1936,6 +2005,41 @@ minstrel_ht_alloc(struct ieee80211_hw *h
  }
  
  #ifdef CPTCFG_MAC80211_DEBUGFS
@@ -385,7 +398,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  static void minstrel_ht_add_debugfs(struct ieee80211_hw *hw, void *priv,
  				    struct dentry *debugfsdir)
  {
-@@ -1944,12 +2044,22 @@ static void minstrel_ht_add_debugfs(stru
+@@ -1944,12 +2048,22 @@ static void minstrel_ht_add_debugfs(stru
  	mp->fixed_rate_idx = (u32) -1;
  	debugfs_create_u32("fixed_rate_idx", S_IRUGO | S_IWUGO, debugfsdir,
  			   &mp->fixed_rate_idx);
@@ -440,13 +453,14 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  #endif
  };
  
-@@ -153,7 +169,13 @@ struct minstrel_sample_category {
+@@ -153,7 +169,14 @@ struct minstrel_sample_category {
  };
  
  struct minstrel_ht_sta {
 +#ifdef CPTCFG_MAC80211_RC_MINSTREL_DEBUGFS_API
 +	struct list_head list;
 +	u32 user_sample_rate;
++	u8 user_sample_count;
 +	struct ieee80211_sta_rates *ratetbl;
 +#endif
  	struct ieee80211_sta *sta;
@@ -454,7 +468,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  
  	/* ampdu length (average, per sampling interval) */
  	unsigned int ampdu_len;
-@@ -197,7 +219,124 @@ struct minstrel_ht_sta {
+@@ -197,7 +220,124 @@ struct minstrel_ht_sta {
  };
  
  void minstrel_ht_add_sta_debugfs(void *priv, void *priv_sta, struct dentry *dir);
@@ -581,22 +595,28 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  #endif
 --- /dev/null
 +++ b/net/mac80211/rc80211_minstrel_ht_api.c
-@@ -0,0 +1,757 @@
+@@ -0,0 +1,833 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
++ * ORCA - Open-Source Resource Control API
++ *
 + * Copyright (C) 2021 Felix Fietkau <nbd@nbd.name>
 + */
 +#include <linux/kernel.h>
 +#include <linux/debugfs.h>
 +#include <linux/relay.h>
 +#include <net/mac80211.h>
++#include "ieee80211_i.h"
++#include "rate.h"
 +#include "rc80211_minstrel_ht.h"
++
++#define ORCA_VERSION "1"
 +
 +extern u8 sample_table[SAMPLE_COLUMNS][MCS_GROUP_RATES];
 +
 +enum sta_cmd {
 +	STA_CMD_PROBE,
-+	STA_CMD_RATES,
++	STA_CMD_RC,
 +};
 +
 +static void
@@ -623,13 +643,14 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
 +minstrel_ht_read_api_info(struct seq_file *s, void *data)
 +{
 +	int i, j;
++	seq_printf(s, "orca_version;%s\n", ORCA_VERSION);
 +
 +	seq_printf(s, "#group;index;offset;type;nss;bw;gi");
 +	for (i = 0; i < MCS_GROUP_RATES; i++)
 +	        seq_printf(s, ";airtime%d", i);
 +        seq_printf(s, "\n");
 +
-+	seq_printf(s, "#sta;action;macaddr;overhead_mcs;overhead_legacy");
++	seq_printf(s, "#sta;action;macaddr;iface;overhead_mcs;overhead_legacy");
 +	for (i = 0; i < MINSTREL_GROUPS_NB; i++)
 +	        seq_printf(s, ";mcs%d", i);
 +	seq_printf(s, "\n");
@@ -661,8 +682,13 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
 +	seq_printf(s, "\n");
 +
 +	seq_printf(s, "#reset_stats;macaddr\n");
-+	seq_printf(s, "#rates;macaddr;rates;counts\n");
-+	seq_printf(s, "#probe;macaddr;rate\n");
++
++	seq_printf(s, "#set_rates;macaddr");
++	for (i = 0; i < IEEE80211_TX_MAX_RATES; i++)
++		seq_printf(s, ";rate%d,count%d", i, i);
++	seq_printf(s, "\n");
++
++	seq_printf(s, "#probe;macaddr;rate;count\n");
 +
 +	seq_printf(s, "#sample_table;cols;rows");
 +	for (i = 0; i < SAMPLE_COLUMNS; i++)
@@ -703,6 +729,33 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
 +	return 0;
 +}
 +
++static int
++minstrel_ht_read_phy_info(struct seq_file *s, void *data)
++{
++	struct wiphy *wiphy = container_of(s->private, struct wiphy, dev);
++	struct ieee80211_local *local = wiphy_priv(wiphy);
++	struct ieee80211_sub_if_data *sdata;
++	struct minstrel_priv *mp = local->rate_ctrl->priv;
++	int i = 0;
++
++	seq_printf(s, "drv;%s\n", wiphy_dev(wiphy)->driver->name);
++
++	mutex_lock(&local->iflist_mtx);
++	list_for_each_entry(sdata, &local->interfaces, list) {
++		if (!i) {
++			seq_printf(s, "if;%s", sdata->name);
++			i++;
++        	} else {
++			seq_printf(s, ",%s", sdata->name);
++		}
++	}
++	mutex_unlock(&local->iflist_mtx);
++
++	seq_printf(s, "\nrc_mode;%s\n", mp->manual ? "manual" : "auto");
++
++	return 0;
++}
++
 +static struct dentry *
 +create_buf_file_cb(const char *filename, struct dentry *parent, umode_t mode,
 +		   struct rchan_buf *buf, int *is_global)
@@ -736,13 +789,16 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
 +minstrel_ht_dump_sta(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
 +		     const char *type)
 +{
++	struct sta_info *sta_info;
 +	char info[64 + MINSTREL_GROUPS_NB * 4];
 +	int ofs = 0;
 +	int i;
 +
-+	ofs += scnprintf(info + ofs, sizeof(info) - ofs, "%llx;sta;%s;%pM;%x;%x;",
-+			(unsigned long long)ktime_get_real_fast_ns(),
-+			type, mi->sta->addr, mi->overhead, mi->overhead_legacy);
++	sta_info = container_of(mi->sta, struct sta_info, sta);
++	ofs += scnprintf(info + ofs, sizeof(info) - ofs, "%llx;sta;%s;%pM;%s;%x;%x;",
++			(unsigned long long)ktime_get_real_fast_ns(), type,
++			mi->sta->addr, sta_info->sdata->name, mi->overhead,
++			mi->overhead_legacy);
 +
 +	ofs += scnprintf(info + ofs, sizeof(info) - ofs, "%x",
 +			 mi->supported[0]);
@@ -835,11 +891,12 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
 +	int i;
 +
 +	for (i = 0; i < __MINSTREL_SAMPLE_TYPE_MAX; i++)
-+		memset(mi->sample[i].sample_rates, 0, 
++		memset(mi->sample[i].sample_rates, 0,
 +		       sizeof(mi->sample[i].sample_rates));
 +
 +	mi->sample_seq = 0;
 +	mi->user_sample_rate = -1;
++	mi->user_sample_count = 0;
 +}
 +
 +static void
@@ -927,36 +984,39 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
 +}
 +
 +static int
-+minstrel_ht_set_probe_rate(struct minstrel_ht_sta *mi, const char *rate_str)
++minstrel_ht_set_probe_rate(struct minstrel_ht_sta *mi, const char *rate_str,
++			   const char *count_str)
 +{
++	unsigned int count;
 +	int rate;
 +
-+	if (!rate_str)
++	if (!rate_str || !count_str)
 +		return -EINVAL;
 +
 +	rate = minstrel_ht_rate_from_str(mi, rate_str);
 +	if (rate < 0)
 +		return rate;
 +
++	if (kstrtouint(count_str, 16, &count))
++		return -EINVAL;
++
 +	mi->user_sample_rate = rate;
++	mi->user_sample_count = count;
 +	return 0;
 +}
 +
 +static int
 +minstrel_ht_set_rates(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
-+		      char *rate_str, char *count_str)
++		      char **stages, unsigned int n_stages)
 +{
 +	struct ieee80211_sta_rates *ratetbl;
++	char *parts[2];
 +	unsigned int count;
-+	char *countlist[4];
-+	char *ratelist[4];
-+	int rate;
-+	int n_rates;
-+	int n_count;
++	int n_parts, rate;
 +	int err = -EINVAL;
 +	int i;
 +
-+	if (!rate_str || !count_str)
++	if (!stages || !stages[0] || !n_stages)
 +		return -EINVAL;
 +
 +	if (!mi->ratetbl)
@@ -967,16 +1027,17 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
 +		return -ENOMEM;
 +
 +	memset(ratetbl, 0, sizeof(*ratetbl));
-+	n_rates = minstrel_ht_get_args(ratelist, ARRAY_SIZE(ratelist),
-+				       rate_str, ",");
-+	n_count = minstrel_ht_get_args(countlist, ARRAY_SIZE(countlist),
-+				       count_str, ",");
-+	for (i = 0; i < min(n_rates, n_count); i++) {
-+		rate = minstrel_ht_rate_from_str(mi, ratelist[i]);
++	for (i = 0; i < n_stages; i++) {
++		n_parts = minstrel_ht_get_args(parts, ARRAY_SIZE(parts),
++					       stages[i], ",");
++		if (n_parts < 2)
++			goto error;
++
++		rate = minstrel_ht_rate_from_str(mi, parts[0]);
 +		if (rate < 0)
 +			goto error;
 +
-+		if (kstrtouint(countlist[i], 16, &count))
++		if (kstrtouint(parts[1], 16, &count))
 +			goto error;
 +
 +		minstrel_ht_set_rate(mp, mi, ratetbl, i, rate);
@@ -1008,7 +1069,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
 +{
 +	struct minstrel_ht_sta *mi;
 +	uint8_t macaddr[ETH_ALEN];
-+	char *args[3];
++	char *args[5];
 +	int n_args;
 +	int ret = -EINVAL;
 +
@@ -1030,10 +1091,10 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
 +
 +	switch (cmd) {
 +	case STA_CMD_PROBE:
-+		ret = minstrel_ht_set_probe_rate(mi, args[1]);
++		ret = minstrel_ht_set_probe_rate(mi, args[1], args[2]);
 +		break;
-+	case STA_CMD_RATES:
-+		ret = minstrel_ht_set_rates(mp, mi, args[1], args[2]);
++	case STA_CMD_RC:
++		ret = minstrel_ht_set_rates(mp, mi, &args[1], n_args - 1);
 +		break;
 +	}
 +
@@ -1094,6 +1155,43 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
 +	return err;
 +}
 +
++static int
++minstrel_ht_execute_and_echo(struct minstrel_priv *mp, char *cmd, char *args)
++{
++	char buf[96];
++	int err = 0, len;
++
++	len = scnprintf(buf, sizeof(buf), "%llx;%s",
++			(unsigned long long)ktime_get_real_fast_ns(), cmd);
++	if (args)
++		len += scnprintf(buf + len, sizeof(buf) - len, ";%s\n", args);
++	else
++		len += scnprintf(buf + len, sizeof(buf) - len, "\n");
++
++	if (!strcmp(cmd, "start"))
++		minstrel_ht_api_start(mp, args);
++	else if (!strcmp(cmd, "stop"))
++		minstrel_ht_api_stop(mp);
++	else if (!strcmp(cmd, "manual"))
++		minstrel_ht_api_set_manual(mp, true);
++	else if (!strcmp(cmd, "auto"))
++		minstrel_ht_api_set_manual(mp, false);
++	else if (!strcmp(cmd, "reset_stats"))
++		err = minstrel_ht_reset_stats(mp, args);
++	else
++		err = -EINVAL;
++
++	if (err)
++		return err;
++
++	spin_lock_bh(&mp->relay_lock);
++	relay_write(mp->relay_ev, buf, len);
++	relay_flush(mp->relay_ev);
++	spin_unlock_bh(&mp->relay_lock);
++
++	return 0;
++}
++
 +static ssize_t
 +minstrel_ht_control_write(struct file *file, const char __user *userbuf,
 +			  size_t count, loff_t *ppos)
@@ -1123,22 +1221,12 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
 +	err = 0;
 +	if (!strcmp(cur, "dump"))
 +		minstrel_ht_dump_stations(mp, "dump");
-+	else if (!strcmp(cur, "start"))
-+		minstrel_ht_api_start(mp, pos);
-+	else if (!strcmp(cur, "stop"))
-+		minstrel_ht_api_stop(mp);
-+	else if (!strcmp(cur, "manual"))
-+		minstrel_ht_api_set_manual(mp, true);
-+	else if (!strcmp(cur, "auto"))
-+		minstrel_ht_api_set_manual(mp, false);
-+	else if (!strcmp(cur, "reset_stats"))
-+		err = minstrel_ht_reset_stats(mp, pos);
-+	else if (!strcmp(cur, "rates"))
-+		err = minstrel_ht_api_sta_cmd(mp, STA_CMD_RATES, pos);
++	else if (!strcmp(cur, "set_rates") || !strcmp(cur, "rates"))
++		err = minstrel_ht_api_sta_cmd(mp, STA_CMD_RC, pos);
 +	else if (!strcmp(cur, "probe"))
 +		err = minstrel_ht_api_sta_cmd(mp, STA_CMD_PROBE, pos);
 +	else
-+		err = -EINVAL;
++		err = minstrel_ht_execute_and_echo(mp, cur, pos);
 +
 +	if (err)
 +		return err;
@@ -1326,6 +1414,8 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
 +				  NULL);
 +	debugfs_create_devm_seqfile(&hw->wiphy->dev, "api_info",
 +				    dir, minstrel_ht_read_api_info);
++	debugfs_create_devm_seqfile(&hw->wiphy->dev, "api_phy",
++				    dir, minstrel_ht_read_phy_info);
 +	debugfs_create_file("api_control", 0200, dir, mp, &fops_control);
 +}
 +
