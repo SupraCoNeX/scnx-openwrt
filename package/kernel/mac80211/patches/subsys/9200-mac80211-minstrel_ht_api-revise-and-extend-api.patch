@@ -37,17 +37,15 @@
  	seq_printf(s, "\n");
  
  	seq_printf(s, "#rxs;macaddr;last_signal");
-@@ -83,20 +93,36 @@ minstrel_ht_read_api_info(struct seq_fil
+@@ -83,20 +93,42 @@ minstrel_ht_read_api_info(struct seq_fil
  	        seq_printf(s, ";slow%d", i);
  	seq_printf(s, "\n");
  
+-	seq_printf(s, "#reset_stats;macaddr\n");
 +	seq_printf(s, "#sample_table;cols;rows");
 +	for (i = 0; i < SAMPLE_COLUMNS; i++)
 +		seq_printf(s, ";column%d", i);
 +	seq_printf(s, "\n");
-+
- 	seq_printf(s, "#reset_stats;macaddr\n");
-+	seq_printf(s, "#reset_stats;all\n");
  
  	seq_printf(s, "#set_rates;macaddr");
  	for (i = 0; i < IEEE80211_TX_MAX_RATES; i++)
@@ -70,15 +68,24 @@
  
 +	seq_printf(s, "#set_probe;macaddr;rate,count,txpwr\n");
 +
++	/*
++	 * Commands targeting 'all' instead of a mac address are executed for
++	 * all currently connected STAs. However, this has no effect on any
++	 * future STAs. For 'rc_mode' and 'tpc_mode', an STA is by default in
++	 * 'auto' mode after connecting.
++	 */
 +	seq_printf(s, "#rc_mode;macaddr;mode\n");
 +	seq_printf(s, "#rc_mode;all;mode\n");
 +	seq_printf(s, "#tpc_mode;macaddr;mode\n");
 +	seq_printf(s, "#tpc_mode;all;mode\n");
 +
++	seq_printf(s, "#reset_stats;macaddr\n");
++	seq_printf(s, "#reset_stats;all\n");
++
  	for (i = 0; i < MINSTREL_GROUPS_NB; i++) {
  		const struct mcs_group *g = &minstrel_mcs_groups[i];
  		const char *type;
-@@ -137,7 +163,6 @@ minstrel_ht_read_phy_info(struct seq_fil
+@@ -137,7 +169,6 @@ minstrel_ht_read_phy_info(struct seq_fil
  	struct wiphy *wiphy = container_of(s->private, struct wiphy, dev);
  	struct ieee80211_local *local = wiphy_priv(wiphy);
  	struct ieee80211_sub_if_data *sdata;
@@ -86,7 +93,7 @@
  	int i = 0;
  
  	seq_printf(s, "drv;%s\n", wiphy_dev(wiphy)->driver->name);
-@@ -152,9 +177,26 @@ minstrel_ht_read_phy_info(struct seq_fil
+@@ -152,9 +183,26 @@ minstrel_ht_read_phy_info(struct seq_fil
  		}
  	}
  	mutex_unlock(&local->iflist_mtx);
@@ -114,7 +121,7 @@
  	return 0;
  }
  
-@@ -192,15 +234,18 @@ minstrel_ht_dump_sta(struct minstrel_pri
+@@ -192,15 +240,18 @@ minstrel_ht_dump_sta(struct minstrel_pri
  		     const char *type)
  {
  	struct sta_info *sta_info;
@@ -138,7 +145,7 @@
  
  	ofs += scnprintf(info + ofs, sizeof(info) - ofs, "%x",
  			 mi->supported[0]);
-@@ -299,26 +344,54 @@ minstrel_ht_reset_sample_table(struct mi
+@@ -299,26 +350,54 @@ minstrel_ht_reset_sample_table(struct mi
  	mi->sample_seq = 0;
  	mi->user_sample_rate = -1;
  	mi->user_sample_count = 0;
@@ -206,7 +213,7 @@
  }
  
  static struct minstrel_ht_sta *
-@@ -386,17 +459,23 @@ minstrel_ht_rate_from_str(struct minstre
+@@ -386,17 +465,23 @@ minstrel_ht_rate_from_str(struct minstre
  }
  
  static int
@@ -234,7 +241,7 @@
  
  	rate = minstrel_ht_rate_from_str(mi, rate_str);
  	if (rate < 0)
-@@ -405,71 +484,148 @@ minstrel_ht_set_probe_rate(struct minstr
+@@ -405,71 +490,146 @@ minstrel_ht_set_probe_rate(struct minstr
  	if (!count_str || kstrtouint(count_str, 16, &count))
  		return -EINVAL;
  
@@ -312,12 +319,16 @@
 -		goto error;
 +	if (kstrtouint(count_str, 16, &count))
 +		return -EINVAL;
-+
+ 
+-	ratetbl = kmemdup(ratetbl, sizeof(*ratetbl), GFP_KERNEL);
+-	if (!ratetbl)
+-		return -ENOMEM;
 +	minstrel_ht_set_rate(mp, mi, mi->ratetbl, stage, rate);
 +	mi->ratetbl->rate[stage].count = count;
 +	mi->ratetbl->rate[stage].count_rts = count;
 +	mi->ratetbl->rate[stage].count_cts = count;
-+
+ 
+-	rate_control_set_rates(mp->hw, mi->sta, ratetbl);
 +	return 0;
 +}
 +
@@ -327,25 +338,24 @@
 +{
 +	u16 raw;
 +	s16 txpwr;
-+
+ 
 +	if (!txpwr_str)
 +		return -EINVAL;
- 
--	ratetbl = kmemdup(ratetbl, sizeof(*ratetbl), GFP_KERNEL);
--	if (!ratetbl)
--		return -ENOMEM;
++
 +	if (kstrtou16(txpwr_str, 16, &raw))
 +		return -EINVAL;
- 
--	rate_control_set_rates(mp->hw, mi->sta, ratetbl);
++
 +	txpwr = (raw <= S16_MAX) ? (s16)raw : -1;
 +	if (txpwr > max_power)
 +		return -ERANGE;
- 
++
 +	mi->ratetbl->rate[stage].txpower_idx = txpwr;
  	return 0;
 +}
-+
+ 
+-error:
+-	kfree(ratetbl);
+-	mi->ratetbl = NULL;
 +static int
 +minstrel_ht_set_ratetbl(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
 +			enum api_cmd cmd, char **args_str, unsigned int n_args)
@@ -355,16 +365,15 @@
 +	int err = 0;
 +	s16 max_tx_power;
 +	bool rc, tpc;
-+
+ 
 +	if (!args_str || !n_args)
 +		return -EINVAL;
 +
-+	rc = cmd == STA_CMD_RC || cmd == STA_CMD_TPRC;
-+	tpc = cmd == STA_CMD_TPC || cmd == STA_CMD_TPRC;
++	rc = (cmd == STA_CMD_RC || cmd == STA_CMD_TPRC);
++	tpc = (cmd == STA_CMD_TPC || cmd == STA_CMD_TPRC);
 +
-+	if (rc && !minstrel_ht_sta_rc_manual_mode(mi))
-+		return -EPERM;
-+	if (tpc && !minstrel_ht_sta_tpc_manual_mode(mi))
++	if ((rc && !minstrel_ht_sta_rc_manual_mode(mi)) ||
++	    (tpc && !minstrel_ht_sta_tpc_manual_mode(mi)))
 +		return -EPERM;
 +
 +	if (tpc)
@@ -392,12 +401,8 @@
 +		mi->ratetbl->rate[i].count = 0;
 +		mi->ratetbl->rate[i].txpower_idx = -1;
 +	}
- 
--error:
--	kfree(ratetbl);
--	mi->ratetbl = NULL;
++
 +	minstrel_ht_update_rates(mp, mi, false);
- 
  	return err;
  }
  
@@ -426,7 +431,7 @@
  			char *arg_str)
  {
  	struct minstrel_ht_sta *mi;
-@@ -478,9 +634,6 @@ minstrel_ht_api_sta_cmd(struct minstrel_
+@@ -478,9 +638,6 @@ minstrel_ht_api_sta_cmd(struct minstrel_
  	int n_args;
  	int ret = -EINVAL;
  
@@ -436,7 +441,7 @@
  	n_args = minstrel_ht_get_args(args, ARRAY_SIZE(args), arg_str, ";");
  	if (!args[0])
  		return -EINVAL;
-@@ -496,10 +649,24 @@ minstrel_ht_api_sta_cmd(struct minstrel_
+@@ -496,10 +653,24 @@ minstrel_ht_api_sta_cmd(struct minstrel_
  
  	switch (cmd) {
  	case STA_CMD_PROBE:
@@ -463,7 +468,7 @@
  		break;
  	}
  
-@@ -507,85 +674,87 @@ minstrel_ht_api_sta_cmd(struct minstrel_
+@@ -507,88 +678,92 @@ minstrel_ht_api_sta_cmd(struct minstrel_
  	return ret;
  }
  
@@ -579,6 +584,7 @@
  	char buf[96];
  	int err = 0, len;
  
++	/* Store command with timestamp, args may be modified later */
  	len = scnprintf(buf, sizeof(buf), "%llx;%s",
 -			(unsigned long long)ktime_get_real_fast_ns(), cmd);
 +			(unsigned long long)ktime_get_real_fast_ns(),
@@ -605,7 +611,11 @@
  	if (err)
  		return err;
  
-@@ -602,10 +771,12 @@ minstrel_ht_control_write(struct file *f
++	/* Echo command to api_event */
+ 	spin_lock_bh(&mp->relay_lock);
+ 	relay_write(mp->relay_ev, buf, len);
+ 	relay_flush(mp->relay_ev);
+@@ -602,10 +777,12 @@ minstrel_ht_control_write(struct file *f
  			  size_t count, loff_t *ppos)
  {
  	struct minstrel_priv *mp = file->private_data;
@@ -618,7 +628,7 @@
  
  	if (len > sizeof(buf) - 1)
  		return -EINVAL;
-@@ -623,16 +794,37 @@ minstrel_ht_control_write(struct file *f
+@@ -623,16 +800,37 @@ minstrel_ht_control_write(struct file *f
  	pos = buf;
  	cur = strsep(&pos, ";");
  
@@ -665,7 +675,7 @@
  	if (err)
  		return err;
  
-@@ -671,6 +863,7 @@ void minstrel_ht_sta_remove(struct minst
+@@ -671,6 +869,7 @@ void minstrel_ht_sta_remove(struct minst
  
  	list_del_rcu(&mi->list);
  	INIT_LIST_HEAD_RCU(&mi->list);
@@ -673,7 +683,7 @@
  
  	spin_unlock_bh(&mp->sta_wlock);
  
-@@ -694,9 +887,10 @@ void __minstrel_ht_report_tx_status(stru
+@@ -694,9 +893,10 @@ void __minstrel_ht_report_tx_status(stru
  				    struct minstrel_ht_sta *mi,
  				    struct ieee80211_tx_info *info,
  				    u16 *rate_list,
@@ -685,7 +695,7 @@
  	int ofs = 0;
  	int i;
  
-@@ -712,12 +906,13 @@ void __minstrel_ht_report_tx_status(stru
+@@ -712,12 +912,13 @@ void __minstrel_ht_report_tx_status(stru
  			 !!(info->flags & IEEE80211_TX_CTL_RATE_CTRL_PROBE));
  
  	for (i = 0; i < n_rates; i++)
