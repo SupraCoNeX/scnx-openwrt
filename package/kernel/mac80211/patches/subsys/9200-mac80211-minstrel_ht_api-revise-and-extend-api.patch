@@ -54,7 +54,7 @@
  		seq_printf(s, ";rate%d,count%d", i, i);
  	seq_printf(s, "\n");
  
--	seq_printf(s, "#probe;macaddr;rate;count\n");
+-	seq_printf(s, "#set_probe;macaddr;rate,count\n");
 +	seq_printf(s, "#set_power;macaddr");
 +	for (i = 0; i < IEEE80211_TX_MAX_RATES; i++)
 +		seq_printf(s, ";txpwr%d", i);
@@ -65,10 +65,10 @@
 -		seq_printf(s, ";column%d", i);
 +	seq_printf(s, "#set_rates_power;macaddr");
 +	for (i = 0; i < IEEE80211_TX_MAX_RATES; i++)
-+		seq_printf(s, ";rate%d,count%d,txpwr%d", i, i, i);
++		seq_printf(s, "rate%d,count%d,txpwr%d", i, i, i);
  	seq_printf(s, "\n");
  
-+	seq_printf(s, "#probe;macaddr;rate;count;txpwr\n");
++	seq_printf(s, "#set_probe;macaddr;rate,count,txpwr\n");
 +
 +	seq_printf(s, "#rc_mode;macaddr;mode\n");
 +	seq_printf(s, "#rc_mode;all;mode\n");
@@ -206,42 +206,54 @@
  }
  
  static struct minstrel_ht_sta *
-@@ -386,12 +459,16 @@ minstrel_ht_rate_from_str(struct minstre
+@@ -386,17 +459,23 @@ minstrel_ht_rate_from_str(struct minstre
  }
  
  static int
--minstrel_ht_set_probe_rate(struct minstrel_ht_sta *mi, const char *rate_str,
--			   const char *count_str)
+-minstrel_ht_set_probe_rate(struct minstrel_ht_sta *mi, const char *arg_str)
 +minstrel_ht_set_probe_rate(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
-+			   const char *rate_str, const char *count_str,
-+			   const char *txpower_str)
++			   char *arg_str)
  {
--	unsigned int count;
-+	unsigned int count, txpower;
+-	char *rate_str, *count_str;
++	char *rate_str, *count_str, *txpwr_str;
+ 	unsigned int count;
  	int rate;
-+	s16 max_power;
++	u16 raw_txpwr;
++	s16 max_power, txpwr = -1;
  
+ 	if (!arg_str)
+ 		return -EINVAL;
 +	if (!mi->rc_manual)
 +		return -EPERM;
- 	if (!rate_str || !count_str)
+ 
+-	count_str = arg_str;
+-	rate_str = strsep(&count_str, ",");
++	txpwr_str = arg_str;
++	rate_str = strsep(&txpwr_str, ",");
++	count_str = strsep(&txpwr_str, ",");
+ 
+ 	rate = minstrel_ht_rate_from_str(mi, rate_str);
+ 	if (rate < 0)
+@@ -405,71 +484,148 @@ minstrel_ht_set_probe_rate(struct minstr
+ 	if (!count_str || kstrtouint(count_str, 16, &count))
  		return -EINVAL;
  
-@@ -402,71 +479,145 @@ minstrel_ht_set_probe_rate(struct minstr
- 	if (kstrtouint(count_str, 16, &count))
- 		return -EINVAL;
- 
-+	if (txpower_str) {
++	if (txpwr_str) {
++		if (!mi->tpc_manual)
++			return -EPERM;
++
 +		max_power = ieee80211_hw_get_max_txpower_idx(mp->hw);
-+		if (kstrtouint(txpower_str, 16, &txpower))
++		if (kstrtou16(txpwr_str, 16, &raw_txpwr))
 +			return -EINVAL;
 +
-+		if (txpower > max_power)
-+			return -EINVAL;
++		txpwr = (raw_txpwr <= S16_MAX) ? (s16)raw_txpwr : -1;
++		if (txpwr > max_power)
++			return -ERANGE;
 +	}
 +
  	mi->user_sample_rate = rate;
  	mi->user_sample_count = count;
-+	mi->user_sample_txpower = (s16)txpower;
++	mi->user_sample_txpower = txpwr;
  	return 0;
  }
  
@@ -262,18 +274,15 @@
 +
 +	rate_str = strsep(rate_count_str, ",");
 +	count_str = strsep(rate_count_str, ",");
-+
-+	if (!rate_str || !count_str)
-+		return -EINVAL;
  
 -	if (!stages || !stages[0] || !n_stages)
-+	rate = minstrel_ht_rate_from_str(mi, rate_str);
-+	if (rate < 0)
++	if (!rate_str || !count_str)
  		return -EINVAL;
  
 -	if (!mi->ratetbl)
 -		mi->ratetbl = kzalloc(sizeof(*ratetbl), GFP_ATOMIC);
-+	if (kstrtouint(count_str, 16, &count))
++	rate = minstrel_ht_rate_from_str(mi, rate_str);
++	if (rate < 0)
 +		return -EINVAL;
  
 -	ratetbl = mi->ratetbl;
@@ -301,43 +310,42 @@
 -	}
 -	if (!i)
 -		goto error;
++	if (kstrtouint(count_str, 16, &count))
++		return -EINVAL;
++
 +	minstrel_ht_set_rate(mp, mi, mi->ratetbl, stage, rate);
 +	mi->ratetbl->rate[stage].count = count;
 +	mi->ratetbl->rate[stage].count_rts = count;
 +	mi->ratetbl->rate[stage].count_cts = count;
- 
--	ratetbl = kmemdup(ratetbl, sizeof(*ratetbl), GFP_KERNEL);
--	if (!ratetbl)
--		return -ENOMEM;
++
 +	return 0;
 +}
- 
--	rate_control_set_rates(mp->hw, mi->sta, ratetbl);
++
 +static int
 +minstrel_ht_ratetbl_set_txpower(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
 +			       char *txpwr_str, int stage, s16 max_power)
 +{
 +	u16 raw;
 +	s16 txpwr;
- 
++
 +	if (!txpwr_str)
 +		return -EINVAL;
-+
+ 
+-	ratetbl = kmemdup(ratetbl, sizeof(*ratetbl), GFP_KERNEL);
+-	if (!ratetbl)
+-		return -ENOMEM;
 +	if (kstrtou16(txpwr_str, 16, &raw))
 +		return -EINVAL;
-+
-+	if (raw >= S16_MAX)
-+		txpwr = -1;
-+	else
-+		txpwr = (s16)raw;
-+
-+	mi->ratetbl->rate[stage].txpower_idx = min(txpwr, max_power);
+ 
+-	rate_control_set_rates(mp->hw, mi->sta, ratetbl);
++	txpwr = (raw <= S16_MAX) ? (s16)raw : -1;
++	if (txpwr > max_power)
++		return -ERANGE;
+ 
++	mi->ratetbl->rate[stage].txpower_idx = txpwr;
  	return 0;
 +}
- 
--error:
--	kfree(ratetbl);
--	mi->ratetbl = NULL;
++
 +static int
 +minstrel_ht_set_ratetbl(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
 +			enum api_cmd cmd, char **args_str, unsigned int n_args)
@@ -384,7 +392,10 @@
 +		mi->ratetbl->rate[i].count = 0;
 +		mi->ratetbl->rate[i].txpower_idx = -1;
 +	}
-+
+ 
+-error:
+-	kfree(ratetbl);
+-	mi->ratetbl = NULL;
 +	minstrel_ht_update_rates(mp, mi, false);
  
  	return err;
@@ -415,7 +426,7 @@
  			char *arg_str)
  {
  	struct minstrel_ht_sta *mi;
-@@ -475,9 +626,6 @@ minstrel_ht_api_sta_cmd(struct minstrel_
+@@ -478,9 +634,6 @@ minstrel_ht_api_sta_cmd(struct minstrel_
  	int n_args;
  	int ret = -EINVAL;
  
@@ -425,12 +436,12 @@
  	n_args = minstrel_ht_get_args(args, ARRAY_SIZE(args), arg_str, ";");
  	if (!args[0])
  		return -EINVAL;
-@@ -493,10 +641,24 @@ minstrel_ht_api_sta_cmd(struct minstrel_
+@@ -496,10 +649,24 @@ minstrel_ht_api_sta_cmd(struct minstrel_
  
  	switch (cmd) {
  	case STA_CMD_PROBE:
--		ret = minstrel_ht_set_probe_rate(mi, args[1], args[2]);
-+		ret = minstrel_ht_set_probe_rate(mp, mi, args[1], args[2], args[3]);
+-		ret = minstrel_ht_set_probe_rate(mi, args[1]);
++		ret = minstrel_ht_set_probe_rate(mp, mi, args[1]);
  		break;
  	case STA_CMD_RC:
 -		ret = minstrel_ht_set_rates(mp, mi, &args[1], n_args - 1);
@@ -452,7 +463,7 @@
  		break;
  	}
  
-@@ -504,85 +666,87 @@ minstrel_ht_api_sta_cmd(struct minstrel_
+@@ -507,85 +674,87 @@ minstrel_ht_api_sta_cmd(struct minstrel_
  	return ret;
  }
  
@@ -594,7 +605,7 @@
  	if (err)
  		return err;
  
-@@ -599,10 +763,12 @@ minstrel_ht_control_write(struct file *f
+@@ -602,10 +771,12 @@ minstrel_ht_control_write(struct file *f
  			  size_t count, loff_t *ppos)
  {
  	struct minstrel_priv *mp = file->private_data;
@@ -607,7 +618,7 @@
  
  	if (len > sizeof(buf) - 1)
  		return -EINVAL;
-@@ -620,16 +786,37 @@ minstrel_ht_control_write(struct file *f
+@@ -623,16 +794,37 @@ minstrel_ht_control_write(struct file *f
  	pos = buf;
  	cur = strsep(&pos, ";");
  
@@ -616,7 +627,7 @@
 -		minstrel_ht_dump_stations(mp, "dump");
 -	else if (!strcmp(cur, "set_rates") || !strcmp(cur, "rates"))
 -		err = minstrel_ht_api_sta_cmd(mp, STA_CMD_RC, pos);
--	else if (!strcmp(cur, "probe"))
+-	else if (!strcmp(cur, "set_probe"))
 -		err = minstrel_ht_api_sta_cmd(mp, STA_CMD_PROBE, pos);
 -	else
 -		err = minstrel_ht_execute_and_echo(mp, cur, pos);
@@ -629,7 +640,7 @@
 +	} else if (!strcmp(cur, "set_rates")) {
 +		cmd = STA_CMD_RC;
 +		echo = false;
-+	} else if (!strcmp(cur, "probe")) {
++	} else if (!strcmp(cur, "set_probe")) {
 +		cmd = STA_CMD_PROBE;
 +		echo = false;
 +	} else if (!strcmp(cur, "dump")) {
@@ -654,7 +665,7 @@
  	if (err)
  		return err;
  
-@@ -668,6 +855,7 @@ void minstrel_ht_sta_remove(struct minst
+@@ -671,6 +863,7 @@ void minstrel_ht_sta_remove(struct minst
  
  	list_del_rcu(&mi->list);
  	INIT_LIST_HEAD_RCU(&mi->list);
@@ -662,7 +673,7 @@
  
  	spin_unlock_bh(&mp->sta_wlock);
  
-@@ -691,9 +879,10 @@ void __minstrel_ht_report_tx_status(stru
+@@ -694,9 +887,10 @@ void __minstrel_ht_report_tx_status(stru
  				    struct minstrel_ht_sta *mi,
  				    struct ieee80211_tx_info *info,
  				    u16 *rate_list,
@@ -674,7 +685,7 @@
  	int ofs = 0;
  	int i;
  
-@@ -709,12 +898,13 @@ void __minstrel_ht_report_tx_status(stru
+@@ -712,12 +906,13 @@ void __minstrel_ht_report_tx_status(stru
  			 !!(info->flags & IEEE80211_TX_CTL_RATE_CTRL_PROBE));
  
  	for (i = 0; i < n_rates; i++)
@@ -850,9 +861,9 @@
 +	}
 +	if (minstrel_ht_sta_rc_manual_mode(mi) && mi->user_sample_rate != -1) {
  		sample_idx = mi->user_sample_rate;
- 		if (mi->user_sample_count != 0)
- 			sample_count = mi->user_sample_count;
-@@ -1899,8 +1910,10 @@ minstrel_ht_alloc_sta(void *priv, struct
+ 		if (mi->user_sample_count > 0 &&
+ 		    mi->user_sample_count <= IEEE80211_MAX_TX_RETRY)
+@@ -1900,8 +1911,10 @@ minstrel_ht_alloc_sta(void *priv, struct
  
  #ifdef CPTCFG_MAC80211_RC_MINSTREL_DEBUGFS_API
  	INIT_LIST_HEAD(&mi->list);

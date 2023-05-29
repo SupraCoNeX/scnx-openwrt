@@ -34,7 +34,7 @@
  
  	info->flags |= mi->tx_flags;
  
-@@ -1658,6 +1666,7 @@ set_rate:
+@@ -1659,6 +1667,7 @@ set_rate:
  	}
  
  	rate->flags = sample_group->flags;
@@ -42,7 +42,7 @@
  }
  
  static void
-@@ -1887,6 +1896,7 @@ minstrel_ht_alloc_sta(void *priv, struct
+@@ -1888,6 +1897,7 @@ minstrel_ht_alloc_sta(void *priv, struct
  
  	mi = kzalloc(sizeof(*mi), gfp);
  	spin_lock_init(&mi->lock);
