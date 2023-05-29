@@ -261,13 +261,14 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  #endif
  
  	/* Don't use EAPOL frames for sampling on non-mrr hw */
-@@ -1573,14 +1611,29 @@ minstrel_ht_get_rate(void *priv, struct
+@@ -1573,14 +1611,30 @@ minstrel_ht_get_rate(void *priv, struct
  	    (info->control.flags & IEEE80211_TX_CTRL_PORT_CTRL_PROTO))
  		return;
  
 +	if (minstrel_ht_manual_mode(mp) && mi->user_sample_rate != -1) {
 +		sample_idx = mi->user_sample_rate;
-+		if (mi->user_sample_count != 0)
++		if (mi->user_sample_count > 0 &&
++		    mi->user_sample_count <= IEEE80211_MAX_TX_RETRY)
 +			sample_count = mi->user_sample_count;
 +
 +		mi->user_sample_rate = -1;
@@ -292,16 +293,16 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  	sample_group = &minstrel_mcs_groups[MI_RATE_GROUP(sample_idx)];
  	sample_idx = MI_RATE_IDX(sample_idx);
  
-@@ -1589,7 +1642,7 @@ minstrel_ht_get_rate(void *priv, struct
+@@ -1589,7 +1643,7 @@ minstrel_ht_get_rate(void *priv, struct
  		return;
  
  	info->flags |= IEEE80211_TX_CTL_RATE_CTRL_PROBE;
 -	rate->count = 1;
-+	rate->count = sample_count;
++	rate->count = min_t(u8, sample_count, mp->max_retry);
  
  	if (sample_group == &minstrel_mcs_groups[MINSTREL_CCK_GROUP]) {
  		int idx = sample_idx % ARRAY_SIZE(mp->cck_rates);
-@@ -1679,7 +1732,7 @@ minstrel_ht_update_caps(void *priv, stru
+@@ -1679,7 +1733,7 @@ minstrel_ht_update_caps(void *priv, stru
  	else
  		use_vht = 0;
  
@@ -310,7 +311,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  
  	mi->sta = sta;
  	mi->band = sband->band;
-@@ -1792,7 +1845,11 @@ minstrel_ht_update_caps(void *priv, stru
+@@ -1792,7 +1846,11 @@ minstrel_ht_update_caps(void *priv, stru
  
  	/* create an initial rate table with the lowest supported rates */
  	minstrel_ht_update_stats(mp, mi);
@@ -323,7 +324,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  }
  
  static void
-@@ -1828,12 +1885,21 @@ minstrel_ht_alloc_sta(void *priv, struct
+@@ -1828,12 +1886,21 @@ minstrel_ht_alloc_sta(void *priv, struct
  			max_rates = sband->n_bitrates;
  	}
  
@@ -346,7 +347,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  	kfree(priv_sta);
  }
  
-@@ -1927,6 +1993,9 @@ minstrel_ht_alloc(struct ieee80211_hw *h
+@@ -1927,6 +1994,9 @@ minstrel_ht_alloc(struct ieee80211_hw *h
  
  	mp->hw = hw;
  	mp->update_interval = HZ / 20;
@@ -356,7 +357,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  
  	minstrel_ht_init_cck_rates(mp);
  	for (i = 0; i < ARRAY_SIZE(mp->hw->wiphy->bands); i++)
-@@ -1936,6 +2005,41 @@ minstrel_ht_alloc(struct ieee80211_hw *h
+@@ -1936,6 +2006,41 @@ minstrel_ht_alloc(struct ieee80211_hw *h
  }
  
  #ifdef CPTCFG_MAC80211_DEBUGFS
@@ -398,7 +399,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  static void minstrel_ht_add_debugfs(struct ieee80211_hw *hw, void *priv,
  				    struct dentry *debugfsdir)
  {
-@@ -1944,12 +2048,22 @@ static void minstrel_ht_add_debugfs(stru
+@@ -1944,12 +2049,22 @@ static void minstrel_ht_add_debugfs(stru
  	mp->fixed_rate_idx = (u32) -1;
  	debugfs_create_u32("fixed_rate_idx", S_IRUGO | S_IWUGO, debugfsdir,
  			   &mp->fixed_rate_idx);
@@ -595,7 +596,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  #endif
 --- /dev/null
 +++ b/net/mac80211/rc80211_minstrel_ht_api.c
-@@ -0,0 +1,833 @@
+@@ -0,0 +1,836 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * ORCA - Open-Source Resource Control API
@@ -688,7 +689,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
 +		seq_printf(s, ";rate%d,count%d", i, i);
 +	seq_printf(s, "\n");
 +
-+	seq_printf(s, "#probe;macaddr;rate;count\n");
++	seq_printf(s, "#set_probe;macaddr;rate,count\n");
 +
 +	seq_printf(s, "#sample_table;cols;rows");
 +	for (i = 0; i < SAMPLE_COLUMNS; i++)
@@ -984,20 +985,23 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
 +}
 +
 +static int
-+minstrel_ht_set_probe_rate(struct minstrel_ht_sta *mi, const char *rate_str,
-+			   const char *count_str)
++minstrel_ht_set_probe_rate(struct minstrel_ht_sta *mi, const char *arg_str)
 +{
++	char *rate_str, *count_str;
 +	unsigned int count;
 +	int rate;
 +
-+	if (!rate_str || !count_str)
++	if (!arg_str)
 +		return -EINVAL;
++
++	count_str = arg_str;
++	rate_str = strsep(&count_str, ",");
 +
 +	rate = minstrel_ht_rate_from_str(mi, rate_str);
 +	if (rate < 0)
 +		return rate;
 +
-+	if (kstrtouint(count_str, 16, &count))
++	if (!count_str || kstrtouint(count_str, 16, &count))
 +		return -EINVAL;
 +
 +	mi->user_sample_rate = rate;
@@ -1091,7 +1095,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
 +
 +	switch (cmd) {
 +	case STA_CMD_PROBE:
-+		ret = minstrel_ht_set_probe_rate(mi, args[1], args[2]);
++		ret = minstrel_ht_set_probe_rate(mi, args[1]);
 +		break;
 +	case STA_CMD_RC:
 +		ret = minstrel_ht_set_rates(mp, mi, &args[1], n_args - 1);
@@ -1223,7 +1227,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
 +		minstrel_ht_dump_stations(mp, "dump");
 +	else if (!strcmp(cur, "set_rates") || !strcmp(cur, "rates"))
 +		err = minstrel_ht_api_sta_cmd(mp, STA_CMD_RC, pos);
-+	else if (!strcmp(cur, "probe"))
++	else if (!strcmp(cur, "set_probe"))
 +		err = minstrel_ht_api_sta_cmd(mp, STA_CMD_PROBE, pos);
 +	else
 +		err = minstrel_ht_execute_and_echo(mp, cur, pos);
