@@ -154,7 +154,16 @@
  
  	while ((cur = strsep(&params, ";")) != NULL) {
  		if (!strlen(cur))
-@@ -279,10 +330,32 @@ minstrel_ht_api_start(struct minstrel_pr
+@@ -268,6 +319,8 @@ minstrel_ht_api_start(struct minstrel_pr
+ 			mask |= MINSTREL_MONITOR_STA;
+ 		else if (!strcmp(cur, "stats"))
+ 			mask |= MINSTREL_MONITOR_STATS;
++		else if (!strcmp(cur, "tprc_echo"))
++			mask |= MINSTREL_ECHO_TPRC;
+ 	}
+ 
+ 	if (!mask)
+@@ -279,10 +332,34 @@ minstrel_ht_api_start(struct minstrel_pr
  }
  
  static void
@@ -180,6 +189,8 @@
 +			mask &= ~MINSTREL_MONITOR_STA;
 +		else if (!strcmp(cur, "stats"))
 +			mask &= ~MINSTREL_MONITOR_STATS;
++		else if (!strcmp(cur, "tprc_echo"))
++			mask &= ~MINSTREL_ECHO_TPRC;
 +	}
 +
 +set_mask:
@@ -189,7 +200,7 @@
  	relay_reset(mp->relay_ev);
  	spin_unlock_bh(&mp->relay_lock);
  }
-@@ -299,26 +372,54 @@ minstrel_ht_reset_sample_table(struct mi
+@@ -299,26 +376,54 @@ minstrel_ht_reset_sample_table(struct mi
  	mi->sample_seq = 0;
  	mi->user_sample_rate = -1;
  	mi->user_sample_count = 0;
@@ -257,7 +268,7 @@
  }
  
  static struct minstrel_ht_sta *
-@@ -386,17 +487,23 @@ minstrel_ht_rate_from_str(struct minstre
+@@ -386,17 +491,23 @@ minstrel_ht_rate_from_str(struct minstre
  }
  
  static int
@@ -285,7 +296,7 @@
  
  	rate = minstrel_ht_rate_from_str(mi, rate_str);
  	if (rate < 0)
-@@ -405,71 +512,146 @@ minstrel_ht_set_probe_rate(struct minstr
+@@ -405,71 +516,146 @@ minstrel_ht_set_probe_rate(struct minstr
  	if (!count_str || kstrtouint(count_str, 16, &count))
  		return -EINVAL;
  
@@ -475,7 +486,7 @@
  			char *arg_str)
  {
  	struct minstrel_ht_sta *mi;
-@@ -478,9 +660,6 @@ minstrel_ht_api_sta_cmd(struct minstrel_
+@@ -478,9 +664,6 @@ minstrel_ht_api_sta_cmd(struct minstrel_
  	int n_args;
  	int ret = -EINVAL;
  
@@ -485,7 +496,7 @@
  	n_args = minstrel_ht_get_args(args, ARRAY_SIZE(args), arg_str, ";");
  	if (!args[0])
  		return -EINVAL;
-@@ -496,10 +675,24 @@ minstrel_ht_api_sta_cmd(struct minstrel_
+@@ -496,10 +679,24 @@ minstrel_ht_api_sta_cmd(struct minstrel_
  
  	switch (cmd) {
  	case STA_CMD_PROBE:
@@ -512,7 +523,7 @@
  		break;
  	}
  
-@@ -507,88 +700,92 @@ minstrel_ht_api_sta_cmd(struct minstrel_
+@@ -507,88 +704,92 @@ minstrel_ht_api_sta_cmd(struct minstrel_
  	return ret;
  }
  
@@ -659,7 +670,7 @@
  	spin_lock_bh(&mp->relay_lock);
  	relay_write(mp->relay_ev, buf, len);
  	relay_flush(mp->relay_ev);
-@@ -602,10 +799,12 @@ minstrel_ht_control_write(struct file *f
+@@ -602,10 +803,12 @@ minstrel_ht_control_write(struct file *f
  			  size_t count, loff_t *ppos)
  {
  	struct minstrel_priv *mp = file->private_data;
@@ -672,7 +683,7 @@
  
  	if (len > sizeof(buf) - 1)
  		return -EINVAL;
-@@ -623,16 +822,37 @@ minstrel_ht_control_write(struct file *f
+@@ -623,16 +826,37 @@ minstrel_ht_control_write(struct file *f
  	pos = buf;
  	cur = strsep(&pos, ";");
  
@@ -687,16 +698,16 @@
 -		err = minstrel_ht_execute_and_echo(mp, cur, pos);
 +	if (!strcmp(cur, "set_rates_power") || !strcmp(cur, "rates")) {
 +		cmd = STA_CMD_TPRC;
-+		echo = false;
++		echo = (mp->monitor & MINSTREL_ECHO_TPRC);
 +	} else if (!strcmp(cur, "set_power")) {
 +		cmd = STA_CMD_TPC;
-+		echo = false;
++		echo = (mp->monitor & MINSTREL_ECHO_TPRC);
 +	} else if (!strcmp(cur, "set_rates")) {
 +		cmd = STA_CMD_RC;
-+		echo = false;
++		echo = (mp->monitor & MINSTREL_ECHO_TPRC);
 +	} else if (!strcmp(cur, "set_probe")) {
 +		cmd = STA_CMD_PROBE;
-+		echo = false;
++		echo = (mp->monitor & MINSTREL_ECHO_TPRC);
 +	} else if (!strcmp(cur, "dump")) {
 +		cmd = PHY_CMD_DUMP;
 +		echo = false;
@@ -719,7 +730,7 @@
  	if (err)
  		return err;
  
-@@ -671,6 +891,7 @@ void minstrel_ht_sta_remove(struct minst
+@@ -671,6 +895,7 @@ void minstrel_ht_sta_remove(struct minst
  
  	list_del_rcu(&mi->list);
  	INIT_LIST_HEAD_RCU(&mi->list);
@@ -727,7 +738,7 @@
  
  	spin_unlock_bh(&mp->sta_wlock);
  
-@@ -694,9 +915,10 @@ void __minstrel_ht_report_tx_status(stru
+@@ -694,9 +919,10 @@ void __minstrel_ht_report_tx_status(stru
  				    struct minstrel_ht_sta *mi,
  				    struct ieee80211_tx_info *info,
  				    u16 *rate_list,
@@ -739,7 +750,7 @@
  	int ofs = 0;
  	int i;
  
-@@ -712,12 +934,13 @@ void __minstrel_ht_report_tx_status(stru
+@@ -712,12 +938,13 @@ void __minstrel_ht_report_tx_status(stru
  			 !!(info->flags & IEEE80211_TX_CTL_RATE_CTRL_PROBE));
  
  	for (i = 0; i < n_rates; i++)
@@ -930,7 +941,15 @@
  	return mi;
 --- a/net/mac80211/rc80211_minstrel_ht.h
 +++ b/net/mac80211/rc80211_minstrel_ht.h
-@@ -107,7 +107,6 @@ struct minstrel_priv {
+@@ -76,6 +76,7 @@
+ #define MINSTREL_MONITOR_TXS		BIT(1)
+ #define MINSTREL_MONITOR_RXS		BIT(2)
+ #define MINSTREL_MONITOR_STATS		BIT(3)
++#define MINSTREL_ECHO_TPRC		BIT(7)
+ 
+ struct minstrel_priv {
+ 	struct ieee80211_hw *hw;
+@@ -107,7 +108,6 @@ struct minstrel_priv {
  	spinlock_t sta_wlock;
  
  	u8 monitor;
@@ -938,7 +957,7 @@
  #endif
  };
  
-@@ -172,8 +171,12 @@ struct minstrel_ht_sta {
+@@ -172,8 +172,12 @@ struct minstrel_ht_sta {
  #ifdef CPTCFG_MAC80211_RC_MINSTREL_DEBUGFS_API
  	struct list_head list;
  	u32 user_sample_rate;
@@ -951,7 +970,7 @@
  #endif
  	struct ieee80211_sta *sta;
  	spinlock_t lock;
-@@ -227,7 +230,7 @@ void minstrel_ht_sta_remove(struct minst
+@@ -227,7 +231,7 @@ void minstrel_ht_sta_remove(struct minst
  void __minstrel_ht_report_tx_status(struct minstrel_priv *mp,
  				    struct minstrel_ht_sta *mi,
  				    struct ieee80211_tx_info *info,
@@ -960,7 +979,7 @@
  void __minstrel_ht_report_rx_status(struct minstrel_priv *mp, u8 *addr,
                                      int last_signal, u8 chain_status,
                                      s8 *chain_signal);
-@@ -265,13 +268,14 @@ static inline void
+@@ -265,13 +269,14 @@ static inline void
  minstrel_ht_report_tx_status(struct minstrel_priv *mp,
  			     struct minstrel_ht_sta *mi,
  			     struct ieee80211_tx_info *info,
@@ -977,7 +996,7 @@
  #endif
  }
  
-@@ -324,10 +328,20 @@ minstrel_ht_report_sample_rates(struct m
+@@ -324,10 +329,20 @@ minstrel_ht_report_sample_rates(struct m
  }
  
  static inline bool
@@ -1000,7 +1019,7 @@
  #else
  	return false;
  #endif
-@@ -338,6 +352,8 @@ void minstrel_ht_set_rate(struct minstre
+@@ -338,6 +353,8 @@ void minstrel_ht_set_rate(struct minstre
  						  int index);
  int minstrel_ht_get_tp_avg(struct minstrel_ht_sta *mi, int group, int rate,
  			   int prob_avg);
