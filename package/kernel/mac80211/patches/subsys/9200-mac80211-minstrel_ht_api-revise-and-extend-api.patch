@@ -755,7 +755,7 @@
  
  	for (i = 0; i < n_rates; i++)
 -		ofs += scnprintf(txs + ofs, sizeof(txs) - ofs, ";%x;%x",
-+		ofs += scnprintf(txs + ofs, sizeof(txs) - ofs, ";%x;%x;%x",
++		ofs += scnprintf(txs + ofs, sizeof(txs) - ofs, ";%x,%x,%x",
  				 rate_list[i],
 -				 info->status.rates[i].count);
 +				 info->status.rates[i].count,
@@ -763,7 +763,7 @@
  
  	for (; i < IEEE80211_TX_MAX_RATES; i++)
 -		ofs += scnprintf(txs + ofs, sizeof(txs) - ofs, ";ffff;0");
-+		ofs += scnprintf(txs + ofs, sizeof(txs) - ofs, ";;;");
++		ofs += scnprintf(txs + ofs, sizeof(txs) - ofs, ";,,");
  
  	ofs += scnprintf(txs + ofs, sizeof(txs) - ofs, "\n");
  
