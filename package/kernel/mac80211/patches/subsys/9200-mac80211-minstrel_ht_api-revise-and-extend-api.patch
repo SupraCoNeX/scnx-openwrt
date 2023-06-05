@@ -385,16 +385,15 @@
 -		goto error;
 +	if (kstrtouint(count_str, 16, &count))
 +		return -EINVAL;
- 
--	ratetbl = kmemdup(ratetbl, sizeof(*ratetbl), GFP_KERNEL);
--	if (!ratetbl)
--		return -ENOMEM;
++
 +	minstrel_ht_set_rate(mp, mi, mi->ratetbl, stage, rate);
 +	mi->ratetbl->rate[stage].count = count;
 +	mi->ratetbl->rate[stage].count_rts = count;
 +	mi->ratetbl->rate[stage].count_cts = count;
  
--	rate_control_set_rates(mp->hw, mi->sta, ratetbl);
+-	ratetbl = kmemdup(ratetbl, sizeof(*ratetbl), GFP_KERNEL);
+-	if (!ratetbl)
+-		return -ENOMEM;
 +	return 0;
 +}
 +
@@ -405,9 +404,10 @@
 +	u16 raw;
 +	s16 txpwr;
  
+-	rate_control_set_rates(mp->hw, mi->sta, ratetbl);
 +	if (!txpwr_str)
 +		return -EINVAL;
-+
+ 
 +	if (kstrtou16(txpwr_str, 16, &raw))
 +		return -EINVAL;
 +
@@ -418,10 +418,7 @@
 +	mi->ratetbl->rate[stage].txpower_idx = txpwr;
  	return 0;
 +}
- 
--error:
--	kfree(ratetbl);
--	mi->ratetbl = NULL;
++
 +static int
 +minstrel_ht_set_ratetbl(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
 +			enum api_cmd cmd, char **args_str, unsigned int n_args)
@@ -435,9 +432,12 @@
 +	if (!args_str || !n_args)
 +		return -EINVAL;
  
+-error:
+-	kfree(ratetbl);
+-	mi->ratetbl = NULL;
 +	rc = (cmd == STA_CMD_RC || cmd == STA_CMD_TPRC);
 +	tpc = (cmd == STA_CMD_TPC || cmd == STA_CMD_TPRC);
-+
+ 
 +	if ((rc && !minstrel_ht_sta_rc_manual_mode(mi)) ||
 +	    (tpc && !minstrel_ht_sta_tpc_manual_mode(mi)))
 +		return -EPERM;
@@ -761,16 +761,23 @@
  	int ofs = 0;
  	int i;
  
-@@ -712,12 +942,13 @@ void __minstrel_ht_report_tx_status(stru
+@@ -711,13 +941,18 @@ void __minstrel_ht_report_tx_status(stru
+ 			 info->status.ampdu_ack_len,
  			 !!(info->flags & IEEE80211_TX_CTL_RATE_CTRL_PROBE));
  
- 	for (i = 0; i < n_rates; i++)
+-	for (i = 0; i < n_rates; i++)
 -		ofs += scnprintf(txs + ofs, sizeof(txs) - ofs, ";%x;%x",
-+		ofs += scnprintf(txs + ofs, sizeof(txs) - ofs, ";%x,%x,%x",
- 				 rate_list[i],
+-				 rate_list[i],
 -				 info->status.rates[i].count);
-+				 info->status.rates[i].count,
++	for (i = 0; i < n_rates; i++) {
++		ofs += scnprintf(txs + ofs, sizeof(txs) - ofs, ";%x,%x,",
++				 rate_list[i], info->status.rates[i].count);
++		if (txpwr_list[i] < 0)
++			continue;
++
++		ofs += scnprintf(txs + ofs, sizeof(txs) - ofs, "%x",
 +				 (u16)(txpwr_list[i]));
++	}
  
  	for (; i < IEEE80211_TX_MAX_RATES; i++)
 -		ofs += scnprintf(txs + ofs, sizeof(txs) - ofs, ";ffff;0");
