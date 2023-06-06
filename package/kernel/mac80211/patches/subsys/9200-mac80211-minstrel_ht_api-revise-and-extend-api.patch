@@ -41,7 +41,7 @@
  	seq_printf(s, "#txs;macaddr;num_frames;num_acked;probe");
  	for (i = 0; i < IEEE80211_TX_MAX_RATES; i++)
 -		seq_printf(s, ";rate%d;count%d", i, i);
-+		seq_printf(s, ";rate%d;count%d;txpwr%d", i, i, i);
++		seq_printf(s, ";rate%d,count%d,txpwr%d", i, i, i);
  	seq_printf(s, "\n");
  
  	seq_printf(s, "#rxs;macaddr;last_signal");
@@ -74,7 +74,7 @@
 -		seq_printf(s, ";column%d", i);
 +	seq_printf(s, "#set_rates_power;macaddr");
 +	for (i = 0; i < IEEE80211_TX_MAX_RATES; i++)
-+		seq_printf(s, "rate%d,count%d,txpwr%d", i, i, i);
++		seq_printf(s, ";rate%d,count%d,txpwr%d", i, i, i);
  	seq_printf(s, "\n");
  
 +	seq_printf(s, "#set_probe;macaddr;rate,count,txpwr\n");
