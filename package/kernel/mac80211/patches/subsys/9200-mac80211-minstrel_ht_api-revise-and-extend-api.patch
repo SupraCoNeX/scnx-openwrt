@@ -344,11 +344,11 @@
 -	int err = -EINVAL;
 -	int i;
 +	int rate;
-+
-+	rate_str = strsep(rate_count_str, ",");
-+	count_str = strsep(rate_count_str, ",");
  
 -	if (!stages || !stages[0] || !n_stages)
++	rate_str = strsep(rate_count_str, ",");
++	count_str = strsep(rate_count_str, ",");
++
 +	if (!rate_str || !count_str)
  		return -EINVAL;
  
@@ -390,13 +390,13 @@
 +	mi->ratetbl->rate[stage].count = count;
 +	mi->ratetbl->rate[stage].count_rts = count;
 +	mi->ratetbl->rate[stage].count_cts = count;
++
++	return 0;
++}
  
 -	ratetbl = kmemdup(ratetbl, sizeof(*ratetbl), GFP_KERNEL);
 -	if (!ratetbl)
 -		return -ENOMEM;
-+	return 0;
-+}
-+
 +static int
 +minstrel_ht_ratetbl_set_txpower(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
 +			       char *txpwr_str, int stage, s16 max_power)
@@ -418,7 +418,10 @@
 +	mi->ratetbl->rate[stage].txpower_idx = txpwr;
  	return 0;
 +}
-+
+ 
+-error:
+-	kfree(ratetbl);
+-	mi->ratetbl = NULL;
 +static int
 +minstrel_ht_set_ratetbl(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
 +			enum api_cmd cmd, char **args_str, unsigned int n_args)
@@ -432,12 +435,9 @@
 +	if (!args_str || !n_args)
 +		return -EINVAL;
  
--error:
--	kfree(ratetbl);
--	mi->ratetbl = NULL;
 +	rc = (cmd == STA_CMD_RC || cmd == STA_CMD_TPRC);
 +	tpc = (cmd == STA_CMD_TPC || cmd == STA_CMD_TPRC);
- 
++
 +	if ((rc && !minstrel_ht_sta_rc_manual_mode(mi)) ||
 +	    (tpc && !minstrel_ht_sta_tpc_manual_mode(mi)))
 +		return -EPERM;
@@ -534,7 +534,7 @@
  		break;
  	}
  
-@@ -507,88 +708,92 @@ minstrel_ht_api_sta_cmd(struct minstrel_
+@@ -507,88 +708,94 @@ minstrel_ht_api_sta_cmd(struct minstrel_
  	return ret;
  }
  
@@ -631,8 +631,10 @@
 +			break;
 +		}
 +		fallthrough;
-+	case STA_CMD_PROBE:
++	case STA_CMD_RC:
++	case STA_CMD_TPC:
 +	case STA_CMD_TPRC:
++	case STA_CMD_PROBE:
 +		err = minstrel_ht_api_sta_cmd(mp, cmd, args);
 +		break;
 +	default:
@@ -681,7 +683,7 @@
  	spin_lock_bh(&mp->relay_lock);
  	relay_write(mp->relay_ev, buf, len);
  	relay_flush(mp->relay_ev);
-@@ -602,10 +807,12 @@ minstrel_ht_control_write(struct file *f
+@@ -602,10 +809,12 @@ minstrel_ht_control_write(struct file *f
  			  size_t count, loff_t *ppos)
  {
  	struct minstrel_priv *mp = file->private_data;
@@ -694,7 +696,7 @@
  
  	if (len > sizeof(buf) - 1)
  		return -EINVAL;
-@@ -623,16 +830,37 @@ minstrel_ht_control_write(struct file *f
+@@ -623,16 +832,37 @@ minstrel_ht_control_write(struct file *f
  	pos = buf;
  	cur = strsep(&pos, ";");
  
@@ -741,7 +743,7 @@
  	if (err)
  		return err;
  
-@@ -671,6 +899,7 @@ void minstrel_ht_sta_remove(struct minst
+@@ -671,6 +901,7 @@ void minstrel_ht_sta_remove(struct minst
  
  	list_del_rcu(&mi->list);
  	INIT_LIST_HEAD_RCU(&mi->list);
@@ -749,7 +751,7 @@
  
  	spin_unlock_bh(&mp->sta_wlock);
  
-@@ -694,9 +923,10 @@ void __minstrel_ht_report_tx_status(stru
+@@ -694,9 +925,10 @@ void __minstrel_ht_report_tx_status(stru
  				    struct minstrel_ht_sta *mi,
  				    struct ieee80211_tx_info *info,
  				    u16 *rate_list,
@@ -761,7 +763,7 @@
  	int ofs = 0;
  	int i;
  
-@@ -711,13 +941,18 @@ void __minstrel_ht_report_tx_status(stru
+@@ -711,13 +943,18 @@ void __minstrel_ht_report_tx_status(stru
  			 info->status.ampdu_ack_len,
  			 !!(info->flags & IEEE80211_TX_CTL_RATE_CTRL_PROBE));
  
