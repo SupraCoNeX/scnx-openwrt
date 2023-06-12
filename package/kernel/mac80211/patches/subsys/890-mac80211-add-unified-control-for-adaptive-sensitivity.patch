@@ -1,0 +1,52 @@
+--- a/include/net/mac80211.h
++++ b/include/net/mac80211.h
+@@ -2635,6 +2635,10 @@ struct ieee80211_txq {
+  * @IEEE80211_HW_MLO_MCAST_MULTI_LINK_TX: Hardware/driver handles transmitting
+  *	multicast frames on all links, mac80211 should not do that.
+  *
++ * @IEEE80211_HW_ADAPTIVE_SENSITIVITY_CTRL: Hardware/driver integrates an
++ * 	adaptive sensitivity feature (e.g. ath9k: ANI, mt76: SCS) AND allows
++ * 	the stack to enable/disable it dynamically.
++ *
+  * @NUM_IEEE80211_HW_FLAGS: number of hardware flags, used for sizing arrays
+  */
+ enum ieee80211_hw_flags {
+@@ -2692,6 +2696,7 @@ enum ieee80211_hw_flags {
+ 	IEEE80211_HW_SUPPORTS_CONC_MON_RX_DECAP,
+ 	IEEE80211_HW_DETECTS_COLOR_COLLISION,
+ 	IEEE80211_HW_MLO_MCAST_MULTI_LINK_TX,
++	IEEE80211_HW_ADAPTIVE_SENSITIVITY_CTRL,
+ 
+ 	/* keep last, obviously */
+ 	NUM_IEEE80211_HW_FLAGS
+@@ -4208,6 +4213,11 @@ struct ieee80211_prep_tx_info {
+  *	flow offloading for flows originating from the vif.
+  *	Note that the driver must not assume that the vif driver_data is valid
+  *	at this point, since the callback can be called during netdev teardown.
++ * @get_adaptive_sens: Get the current state (enabled/disabled) of the adaptive
++ * 	sensitivity feature of the hardware/driver, in case its supported.
++ * @set_adaptive_sens: Enable/disable the adaptive sensitivity feature of the
++ * 	hardware/driver in case its supported and can be dynamically enabled/
++ * 	disabled.
+  */
+ struct ieee80211_ops {
+ 	void (*tx)(struct ieee80211_hw *hw,
+@@ -4570,6 +4580,8 @@ struct ieee80211_ops {
+ 			    struct net_device *dev,
+ 			    enum tc_setup_type type,
+ 			    void *type_data);
++	bool (*get_adaptive_sens)(struct ieee80211_hw *hw);
++	void (*set_adaptive_sens)(struct ieee80211_hw *hw, bool enable);
+ };
+ 
+ /**
+--- a/net/mac80211/debugfs.c
++++ b/net/mac80211/debugfs.c
+@@ -496,6 +496,7 @@ static const char *hw_flag_names[] = {
+ 	FLAG(SUPPORTS_CONC_MON_RX_DECAP),
+ 	FLAG(DETECTS_COLOR_COLLISION),
+ 	FLAG(MLO_MCAST_MULTI_LINK_TX),
++	FLAG(ADAPTIVE_SENSITIVITY_CTRL),
+ #undef FLAG
+ };
+ 
