@@ -1,0 +1,42 @@
+--- a/mt7603/init.c
++++ b/mt7603/init.c
+@@ -532,6 +532,7 @@ int mt7603_register_device(struct mt7603
+ 	ieee80211_hw_set(hw, TX_STATUS_NO_AMPDU_LEN);
+ 	ieee80211_hw_set(hw, HOST_BROADCAST_PS_BUFFERING);
+ 	ieee80211_hw_set(hw, NEEDS_UNIQUE_STA_ADDR);
++	ieee80211_hw_set(hw, ADAPTIVE_SENSITIVITY_CTRL);
+ 
+ 	/* init led callbacks */
+ 	if (IS_ENABLED(CONFIG_MT76_LEDS)) {
+--- a/mt7603/main.c
++++ b/mt7603/main.c
+@@ -697,6 +697,20 @@ static void mt7603_tx(struct ieee80211_h
+ 	mt76_tx(&dev->mphy, control->sta, wcid, skb);
+ }
+ 
++static bool mt7603_get_dynamic_sensitivity(struct ieee80211_hw *hw)
++{
++	struct mt7603_dev *dev = hw->priv;
++
++	return dev->dynamic_sensitivity;
++}
++
++static void mt7603_set_dynamic_sensitivity(struct ieee80211_hw *hw, bool enable)
++{
++	struct mt7603_dev *dev = hw->priv;
++
++	dev->dynamic_sensitivity = enable;
++}
++
+ const struct ieee80211_ops mt7603_ops = {
+ 	.tx = mt7603_tx,
+ 	.start = mt7603_start,
+@@ -723,6 +737,8 @@ const struct ieee80211_ops mt7603_ops =
+ 	.get_survey = mt76_get_survey,
+ 	.get_antenna = mt76_get_antenna,
+ 	.set_sar_specs = mt7603_set_sar_specs,
++	.get_adaptive_sens = mt7603_get_dynamic_sensitivity,
++	.set_adaptive_sens = mt7603_set_dynamic_sensitivity,
+ };
+ 
+ MODULE_LICENSE("Dual BSD/GPL");
