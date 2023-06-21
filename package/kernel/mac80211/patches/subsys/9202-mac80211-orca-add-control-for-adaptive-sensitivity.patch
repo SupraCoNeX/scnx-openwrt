@@ -8,7 +8,7 @@
  
  	/* per-STA commands */
  	STA_CMD_RC_MODE,
-@@ -384,6 +385,40 @@ orca_reset_sample_table(struct minstrel_
+@@ -388,6 +389,40 @@ orca_reset_sample_table(struct minstrel_
  }
  
  static int
@@ -49,7 +49,7 @@
  orca_sta_set_rc_mode(struct minstrel_ht_sta *mi, char *mode)
  {
  	int i;
-@@ -766,6 +801,9 @@ orca_exec_cmd(struct minstrel_priv *mp,
+@@ -770,6 +805,9 @@ orca_exec_cmd(struct minstrel_priv *mp,
  	case STA_CMD_PROBE:
  		err = orca_sta_cmd(mp, cmd, args);
  		break;
@@ -59,7 +59,7 @@
  	default:
  		err = -EINVAL;
  	}
-@@ -855,6 +893,8 @@ orca_control_write(struct file *file, co
+@@ -859,6 +897,8 @@ orca_control_write(struct file *file, co
  		cmd = STA_CMD_TPC_MODE;
  	} else if (!strcmp(cur, "reset_stats")) {
  		cmd = STA_CMD_RESET_STATS;
