@@ -1,6 +1,6 @@
 --- /dev/null
 +++ b/net/mac80211/orca.c
-@@ -0,0 +1,1071 @@
+@@ -0,0 +1,1075 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * ORCA - Open-Source Resource Control API
@@ -289,8 +289,12 @@
 +
 +	ofs += scnprintf(line + ofs, sizeof(line), "\n");
 +
++	spin_lock_bh(&mp->relay_lock);
++
 +	relay_write(mp->relay_ev, line, ofs);
 +	relay_flush(mp->relay_ev);
++
++	spin_unlock_bh(&mp->relay_lock);
 +}
 +
 +static void
@@ -1074,7 +1078,7 @@
 +}
 --- a/net/mac80211/rc80211_minstrel_ht_api.c
 +++ /dev/null
-@@ -1,1073 +0,0 @@
+@@ -1,1077 +0,0 @@
 -// SPDX-License-Identifier: GPL-2.0-only
 -/*
 - * ORCA - Open-Source Resource Control API
@@ -1363,8 +1367,12 @@
 -
 -	ofs += scnprintf(line + ofs, sizeof(line), "\n");
 -
+-	spin_lock_bh(&mp->relay_lock);
+-
 -	relay_write(mp->relay_ev, line, ofs);
 -	relay_flush(mp->relay_ev);
+-
+-	spin_lock_bh(&mp->relay_lock);
 -}
 -
 -static void

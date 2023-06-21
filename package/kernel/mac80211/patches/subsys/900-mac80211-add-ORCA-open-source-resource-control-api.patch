@@ -596,7 +596,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  #endif
 --- /dev/null
 +++ b/net/mac80211/rc80211_minstrel_ht_api.c
-@@ -0,0 +1,836 @@
+@@ -0,0 +1,840 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * ORCA - Open-Source Resource Control API
@@ -830,8 +830,12 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
 +
 +	ofs += scnprintf(line + ofs, sizeof(line), "\n");
 +
++	spin_lock_bh(&mp->relay_lock);
++
 +	relay_write(mp->relay_ev, line, ofs);
 +	relay_flush(mp->relay_ev);
++
++	spin_lock_bh(&mp->relay_lock);
 +}
 +
 +static void
