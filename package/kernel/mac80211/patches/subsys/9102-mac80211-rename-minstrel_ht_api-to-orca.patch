@@ -16,7 +16,7 @@
 +#include "rate.h"
 +#include "rc80211_minstrel_ht.h"
 +
-+#define ORCA_VERSION "1"
++#define ORCA_VERSION "2"
 +
 +extern u8 sample_table[SAMPLE_COLUMNS][MCS_GROUP_RATES];
 +
@@ -1094,7 +1094,7 @@
 -#include "rate.h"
 -#include "rc80211_minstrel_ht.h"
 -
--#define ORCA_VERSION "1"
+-#define ORCA_VERSION "2"
 -
 -extern u8 sample_table[SAMPLE_COLUMNS][MCS_GROUP_RATES];
 -
