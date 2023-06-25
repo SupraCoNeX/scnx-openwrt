@@ -235,7 +235,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  	rates = kzalloc(sizeof(*rates), GFP_ATOMIC);
  	if (!rates)
  		return;
-@@ -1539,7 +1573,7 @@ minstrel_ht_get_sample_rate(struct minst
+@@ -1546,7 +1580,7 @@ minstrel_ht_get_sample_rate(struct minst
  {
  	u8 seq;
  
@@ -244,15 +244,16 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  		seq = mi->sample_seq;
  		mi->sample_seq = (seq + 1) % ARRAY_SIZE(minstrel_sample_seq);
  		seq = minstrel_sample_seq[seq];
-@@ -1560,12 +1594,16 @@ minstrel_ht_get_rate(void *priv, struct
+@@ -1567,6 +1601,8 @@ minstrel_ht_get_rate(void *priv, struct
  	struct minstrel_ht_sta *mi = priv_sta;
  	struct minstrel_priv *mp = priv;
  	u16 sample_idx;
 +	u32 sampling_interval = MINSTREL_SAMPLE_INTERVAL;
 +	u8 sample_count = 1;
+ 	s16 sample_txpower = -1;
  
  	info->flags |= mi->tx_flags;
- 
+@@ -1574,6 +1610,8 @@ minstrel_ht_get_rate(void *priv, struct
  #ifdef CPTCFG_MAC80211_DEBUGFS
  	if (mp->fixed_rate_idx != -1)
  		return;
@@ -261,7 +262,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  #endif
  
  	/* Don't use EAPOL frames for sampling on non-mrr hw */
-@@ -1573,14 +1611,30 @@ minstrel_ht_get_rate(void *priv, struct
+@@ -1581,14 +1619,30 @@ minstrel_ht_get_rate(void *priv, struct
  	    (info->control.flags & IEEE80211_TX_CTRL_PORT_CTRL_PROTO))
  		return;
  
@@ -293,7 +294,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  	sample_group = &minstrel_mcs_groups[MI_RATE_GROUP(sample_idx)];
  	sample_idx = MI_RATE_IDX(sample_idx);
  
-@@ -1589,7 +1643,7 @@ minstrel_ht_get_rate(void *priv, struct
+@@ -1597,7 +1651,7 @@ minstrel_ht_get_rate(void *priv, struct
  		return;
  
  	info->flags |= IEEE80211_TX_CTL_RATE_CTRL_PROBE;
@@ -302,7 +303,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  
  	if (sample_group == &minstrel_mcs_groups[MINSTREL_CCK_GROUP]) {
  		int idx = sample_idx % ARRAY_SIZE(mp->cck_rates);
-@@ -1679,7 +1733,7 @@ minstrel_ht_update_caps(void *priv, stru
+@@ -1688,7 +1742,7 @@ minstrel_ht_update_caps(void *priv, stru
  	else
  		use_vht = 0;
  
@@ -311,7 +312,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  
  	mi->sta = sta;
  	mi->band = sband->band;
-@@ -1792,7 +1846,11 @@ minstrel_ht_update_caps(void *priv, stru
+@@ -1801,7 +1855,11 @@ minstrel_ht_update_caps(void *priv, stru
  
  	/* create an initial rate table with the lowest supported rates */
  	minstrel_ht_update_stats(mp, mi);
@@ -324,7 +325,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  }
  
  static void
-@@ -1828,12 +1886,21 @@ minstrel_ht_alloc_sta(void *priv, struct
+@@ -1837,12 +1895,21 @@ minstrel_ht_alloc_sta(void *priv, struct
  			max_rates = sband->n_bitrates;
  	}
  
@@ -347,7 +348,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  	kfree(priv_sta);
  }
  
-@@ -1927,6 +1994,9 @@ minstrel_ht_alloc(struct ieee80211_hw *h
+@@ -1936,6 +2003,9 @@ minstrel_ht_alloc(struct ieee80211_hw *h
  
  	mp->hw = hw;
  	mp->update_interval = HZ / 20;
@@ -357,7 +358,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  
  	minstrel_ht_init_cck_rates(mp);
  	for (i = 0; i < ARRAY_SIZE(mp->hw->wiphy->bands); i++)
-@@ -1936,6 +2006,41 @@ minstrel_ht_alloc(struct ieee80211_hw *h
+@@ -1945,6 +2015,41 @@ minstrel_ht_alloc(struct ieee80211_hw *h
  }
  
  #ifdef CPTCFG_MAC80211_DEBUGFS
@@ -399,7 +400,7 @@ Signed-off-by: Felix Fietkau <nbd@nbd.name>
  static void minstrel_ht_add_debugfs(struct ieee80211_hw *hw, void *priv,
  				    struct dentry *debugfsdir)
  {
-@@ -1944,12 +2049,22 @@ static void minstrel_ht_add_debugfs(stru
+@@ -1953,12 +2058,22 @@ static void minstrel_ht_add_debugfs(stru
  	mp->fixed_rate_idx = (u32) -1;
  	debugfs_create_u32("fixed_rate_idx", S_IRUGO | S_IWUGO, debugfsdir,
  			   &mp->fixed_rate_idx);
