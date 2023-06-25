@@ -2234,16 +2234,17 @@
  
  	spin_unlock_bh(&mi->lock);
  }
-@@ -1909,7 +1909,7 @@ minstrel_ht_alloc_sta(void *priv, struct
+@@ -1908,7 +1908,8 @@ minstrel_ht_alloc_sta(void *priv, struct
+ 
  	mi = kzalloc(sizeof(*mi), gfp);
  	spin_lock_init(&mi->lock);
- 
 -#ifdef CPTCFG_MAC80211_RC_MINSTREL_DEBUGFS_API
++
 +#ifdef CPTCFG_MAC80211_ORCA
  	INIT_LIST_HEAD(&mi->list);
  	mi->ratetbl = kzalloc(sizeof(*mi->ratetbl), gfp);
  	mi->user_sample_rate = -1;
-@@ -1923,7 +1923,7 @@ minstrel_ht_alloc_sta(void *priv, struct
+@@ -1922,7 +1923,7 @@ minstrel_ht_alloc_sta(void *priv, struct
  static void
  minstrel_ht_free_sta(void *priv, struct ieee80211_sta *sta, void *priv_sta)
  {
@@ -2252,7 +2253,7 @@
  	kfree(priv_sta);
  }
  
-@@ -2080,14 +2080,14 @@ static void minstrel_ht_add_debugfs(stru
+@@ -2079,14 +2080,14 @@ static void minstrel_ht_add_debugfs(stru
  				   &mp->sampling_interval,
  				   &minstrel_ht_debugfs_hz_fops);
  

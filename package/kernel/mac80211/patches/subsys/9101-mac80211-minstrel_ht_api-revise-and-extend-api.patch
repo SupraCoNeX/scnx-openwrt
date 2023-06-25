@@ -948,8 +948,8 @@
  		sample_idx = mi->user_sample_rate;
  		if (mi->user_sample_count > 0 &&
  		    mi->user_sample_count <= IEEE80211_MAX_TX_RETRY)
-@@ -1900,8 +1911,10 @@ minstrel_ht_alloc_sta(void *priv, struct
- 
+@@ -1899,8 +1910,10 @@ minstrel_ht_alloc_sta(void *priv, struct
+ 	spin_lock_init(&mi->lock);
  #ifdef CPTCFG_MAC80211_RC_MINSTREL_DEBUGFS_API
  	INIT_LIST_HEAD(&mi->list);
 +	mi->ratetbl = kzalloc(sizeof(*mi->ratetbl), gfp);
