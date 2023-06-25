@@ -8,7 +8,12 @@
   */
  #include <linux/kernel.h>
  #include <linux/debugfs.h>
-@@ -16,8 +17,18 @@
+@@ -12,12 +13,22 @@
+ #include "rate.h"
+ #include "rc80211_minstrel_ht.h"
+ 
+-#define ORCA_VERSION "1"
++#define ORCA_VERSION "2"
  
  extern u8 sample_table[SAMPLE_COLUMNS][MCS_GROUP_RATES];
  
