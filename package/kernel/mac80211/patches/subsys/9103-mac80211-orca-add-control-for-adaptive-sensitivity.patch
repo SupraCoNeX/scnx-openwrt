@@ -1,5 +1,5 @@
---- a/net/mac80211/orca.c
-+++ b/net/mac80211/orca.c
+--- a/net/mac80211/orca_uapi.c
++++ b/net/mac80211/orca_uapi.c
 @@ -21,6 +21,7 @@ enum api_cmd {
  	PHY_CMD_START,
  	PHY_CMD_STOP,
