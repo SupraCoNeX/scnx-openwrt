@@ -276,7 +276,7 @@
  #endif
  	struct ieee80211_sta *sta;
  	spinlock_t lock;
-@@ -221,113 +225,122 @@ struct minstrel_ht_sta {
+@@ -221,113 +225,121 @@ struct minstrel_ht_sta {
  
  void minstrel_ht_add_sta_debugfs(void *priv, void *priv_sta, struct dentry *dir);
  
@@ -305,7 +305,7 @@
 +			     struct ieee80211_tx_info *info,
 +			     u16 *rate_list, s16* txpwr_list, int n_rates);
 +void __orca_report_rx_status(struct minstrel_priv *mp, u8 *addr,
-+			     int last_signal, u8 chain_status,
++			     s8 last_signal, u8 chain_status,
 +			     s8 *chain_signal);
 +void __orca_report_rate_update(struct minstrel_priv *mp,
 +			       struct minstrel_ht_sta *mi, u16 rate,
@@ -366,7 +366,7 @@
  static inline void
 -minstrel_ht_report_rx_status(struct minstrel_priv *mp, u8 *addr,
 -                             int last_signal, u8 chain_status, s8 *chain_signal)
-+orca_report_rx_status(struct minstrel_priv *mp, u8 *addr, int last_signal,
++orca_report_rx_status(struct minstrel_priv *mp, u8 *addr, s8 last_signal,
 +		      u8 chain_status, s8 *chain_signal)
  {
 -#ifdef CPTCFG_MAC80211_RC_MINSTREL_DEBUGFS_API
@@ -376,8 +376,8 @@
  		return;
  
 -	__minstrel_ht_report_rx_status(mp, addr, last_signal,
-+	__orca_report_rx_status(mp, addr, last_signal,
- 	                               chain_status, chain_signal);
+-	                               chain_status, chain_signal);
++	__orca_report_rx_status(mp, addr, last_signal, chain_status, chain_signal);
  #endif
  }
  
@@ -451,7 +451,7 @@
  #else
  	return false;
  #endif
-@@ -338,6 +351,8 @@ void minstrel_ht_set_rate(struct minstre
+@@ -338,6 +350,8 @@ void minstrel_ht_set_rate(struct minstre
  						  int index);
  int minstrel_ht_get_tp_avg(struct minstrel_ht_sta *mi, int group, int rate,
  			   int prob_avg);
@@ -1491,21 +1491,21 @@
 +	spin_unlock_bh(&mp->relay_lock);
 +}
 +
-+void __orca_report_rx_status(struct minstrel_priv *mp, u8 *addr,
-+				    int last_signal, u8 chain_status,
-+				    s8 *chain_signal)
++void __orca_report_rx_status(struct minstrel_priv *mp, u8 *addr, s8 last_signal,
++			     u8 chain_status, s8 *chain_signal)
 +{
 +	char rxs[64 + IEEE80211_MAX_CHAINS * 8];
 +	int ofs = 0;
 +	int i;
 +
++	/* Cast signal to u8 to avoid having ffffff for negative values */
 +	ofs += scnprintf(rxs, sizeof(rxs), "%llx;rxs;%pM;%x",
 +			 (unsigned long long)ktime_get_real_fast_ns(),
-+			 addr, last_signal);
++			 addr, (u8)last_signal);
 +
 +	for (i = 0; i < IEEE80211_MAX_CHAINS; i++)
 +	ofs += scnprintf(rxs + ofs, sizeof(rxs) - ofs, ";%x",
-+			 (chain_status & BIT(i) ? chain_signal[i] : 0x7f));
++			 (chain_status & BIT(i) ? (u8)chain_signal[i] : 0x7f));
 +
 +	ofs += scnprintf(rxs + ofs, sizeof(rxs) - ofs, "\n");
 +
