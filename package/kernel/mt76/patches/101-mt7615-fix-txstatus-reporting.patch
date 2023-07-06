@@ -10,7 +10,7 @@ Signed-off-by: Thomas Huehn <thomas.huehn@hs-nordhausen.de>
 
 --- a/mt7615/mac.c
 +++ b/mt7615/mac.c
-@@ -1529,6 +1529,9 @@ static void mt7615_mac_add_txs(struct mt
+@@ -1500,6 +1500,9 @@ static void mt7615_mac_add_txs(struct mt
  	u8 wcidx;
  	u8 pid;
  
