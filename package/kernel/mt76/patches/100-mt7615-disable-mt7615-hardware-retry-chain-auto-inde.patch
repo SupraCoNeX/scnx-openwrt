@@ -64,7 +64,7 @@ Signed-off-by: Thomas Huehn <thomas.huehn@hs-nordhausen.de>
  	debugfs_create_file("dbdc", 0600, dir, dev, &fops_dbdc);
 --- a/mt7615/mac.c
 +++ b/mt7615/mac.c
-@@ -1002,6 +1002,9 @@ mt7615_mac_update_rate_desc(struct mt761
+@@ -1001,6 +1001,9 @@ mt7615_mac_update_rate_desc(struct mt761
  		if ((ref->flags ^ rates[i].flags) & IEEE80211_TX_RC_SHORT_GI)
  			rates[i].flags ^= IEEE80211_TX_RC_SHORT_GI;
  
@@ -76,12 +76,12 @@ Signed-off-by: Thomas Huehn <thomas.huehn@hs-nordhausen.de>
  				continue;
 --- a/mt7615/mt7615.h
 +++ b/mt7615/mt7615.h
-@@ -264,6 +264,8 @@ struct mt7615_dev {
+@@ -261,6 +261,8 @@ struct mt7615_dev {
  	wait_queue_head_t reset_wait;
  	u32 reset_state;
  
 +	bool force_rate_retry_en;
 +
- 	struct list_head sta_poll_list;
- 	spinlock_t sta_poll_lock;
- 
+ 	struct {
+ 		u8 n_pulses;
+ 		u32 period;

@@ -10,7 +10,7 @@ Signed-off-by: Thomas Huehn <thomas.huehn@hs-nordhausen.de>
 
 --- a/mt7615/mac.c
 +++ b/mt7615/mac.c
-@@ -1402,6 +1402,7 @@ static bool mt7615_fill_txs(struct mt761
+@@ -1373,6 +1373,7 @@ static bool mt7615_fill_txs(struct mt761
  
  	if (!first_idx && rs->probe_rate.idx >= 0) {
  		info->status.rates[0] = rs->probe_rate;
@@ -18,7 +18,7 @@ Signed-off-by: Thomas Huehn <thomas.huehn@hs-nordhausen.de>
  
  		spin_lock_bh(&dev->mt76.lock);
  		if (sta->rate_probe) {
-@@ -1415,6 +1416,7 @@ static bool mt7615_fill_txs(struct mt761
+@@ -1386,6 +1387,7 @@ static bool mt7615_fill_txs(struct mt761
  		spin_unlock_bh(&dev->mt76.lock);
  	} else {
  		info->status.rates[0] = rs->rates[first_idx / 2];
