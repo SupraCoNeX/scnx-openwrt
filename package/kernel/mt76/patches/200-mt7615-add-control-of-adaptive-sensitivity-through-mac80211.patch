@@ -1,6 +1,6 @@
 --- a/mt7615/main.c
 +++ b/mt7615/main.c
-@@ -1296,6 +1296,25 @@ static void mt7615_set_rekey_data(struct
+@@ -1325,6 +1325,25 @@ static void mt7615_set_rekey_data(struct
  }
  #endif /* CONFIG_PM */
  
@@ -26,7 +26,7 @@
  const struct ieee80211_ops mt7615_ops = {
  	.tx = mt7615_tx,
  	.start = mt7615_start,
-@@ -1343,6 +1362,8 @@ const struct ieee80211_ops mt7615_ops =
+@@ -1372,6 +1391,8 @@ const struct ieee80211_ops mt7615_ops =
  	.set_rekey_data = mt7615_set_rekey_data,
  #endif /* CONFIG_PM */
  	.set_sar_specs = mt7615_set_sar_specs,
@@ -37,7 +37,7 @@
  
 --- a/mt7615/init.c
 +++ b/mt7615/init.c
-@@ -403,6 +403,7 @@ mt7615_init_wiphy(struct ieee80211_hw *h
+@@ -405,6 +405,7 @@ mt7615_init_wiphy(struct ieee80211_hw *h
  	ieee80211_hw_set(hw, WANT_MONITOR_VIF);
  	ieee80211_hw_set(hw, SUPPORTS_RX_DECAP_OFFLOAD);
  	ieee80211_hw_set(hw, SUPPORTS_VHT_EXT_NSS_BW);
