@@ -10,10 +10,11 @@
  	int i = 0;
  
  	seq_printf(s, "drv;%s\n", wiphy_dev(wiphy)->driver->name);
-@@ -208,6 +211,23 @@ orca_read_phy_info(struct seq_file *s, v
+@@ -208,6 +211,24 @@ orca_read_phy_info(struct seq_file *s, v
  	seq_printf(s, "\n");
  
  skip_tpc:
++	/* keep this block last! */
 +	rcu_read_lock();
 +	list_for_each_entry_rcu(mi, &mp->stations, list) {
 +		sta_info = container_of(mi->sta, struct sta_info, sta);
