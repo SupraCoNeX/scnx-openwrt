@@ -19,24 +19,49 @@
  
  	/* keep last, obviously */
  	NUM_IEEE80211_HW_FLAGS
-@@ -4208,6 +4213,11 @@ struct ieee80211_prep_tx_info {
+@@ -3597,6 +3602,20 @@ struct ieee80211_prep_tx_info {
+ 	u8 success:1;
+ };
+ 
++/*
++ * enum ieee80211_feature - controllable hw features
++ *
++ * These values are used for the driver ops get_feature_state and
++ * set_feature_state to dynamically control the state (enable/disable)
++ * a particular feature.
++ *
++ * @IEEE80211_FEAT_ADAPTIVE_SENSITIVITY: Adaptive sensitivity to
++ * 	dynamically adjust the receive sensitivity by a certain algorithm.
++ */
++enum ieee80211_feature {
++	IEEE80211_FEAT_ADAPTIVE_SENSITIVITY = 0,
++};
++
+ /**
+  * struct ieee80211_ops - callbacks from mac80211 to the driver
+  *
+@@ -4208,6 +4227,14 @@ struct ieee80211_prep_tx_info {
   *	flow offloading for flows originating from the vif.
   *	Note that the driver must not assume that the vif driver_data is valid
   *	at this point, since the callback can be called during netdev teardown.
-+ * @get_adaptive_sens: Get the current state (enabled/disabled) of the adaptive
-+ * 	sensitivity feature of the hardware/driver, in case its supported.
-+ * @set_adaptive_sens: Enable/disable the adaptive sensitivity feature of the
-+ * 	hardware/driver in case its supported and can be dynamically enabled/
-+ * 	disabled.
++ * @get_feature_state: Get the current state of the specified feature. This
++ * 	must return 0 for 'disabled', 1 for 'enabled' and a negative value in
++ * 	case the feature is not supported. However, a caller should check for
++ * 	hw_flags prior to calling this.
++ * @set_feature_state: Enable/disable the specified feature of the
++ * 	hardware/driver. This may return a positive non-zero value denoting the
++ * 	success and 0 denoting failure. It must return a negative value in
++ * 	in case the feature is not supported or cannot be controlled dynamically.
   */
  struct ieee80211_ops {
  	void (*tx)(struct ieee80211_hw *hw,
-@@ -4570,6 +4580,8 @@ struct ieee80211_ops {
+@@ -4570,6 +4597,9 @@ struct ieee80211_ops {
  			    struct net_device *dev,
  			    enum tc_setup_type type,
  			    void *type_data);
-+	bool (*get_adaptive_sens)(struct ieee80211_hw *hw);
-+	void (*set_adaptive_sens)(struct ieee80211_hw *hw, bool enable);
++	int (*get_feature_state)(struct ieee80211_hw *hw, enum ieee80211_feature);
++	int (*set_feature_state)(struct ieee80211_hw *hw, enum ieee80211_feature,
++				 bool enable);
  };
  
  /**
