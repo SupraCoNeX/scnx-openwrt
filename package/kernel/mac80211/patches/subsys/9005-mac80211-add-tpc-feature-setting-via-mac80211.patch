@@ -1,0 +1,17 @@
+--- a/include/net/mac80211.h
++++ b/include/net/mac80211.h
+@@ -3671,9 +3671,14 @@ struct ieee80211_prep_tx_info {
+  *
+  * @IEEE80211_FEAT_ADAPTIVE_SENSITIVITY: Adaptive sensitivity to
+  * 	dynamically adjust the receive sensitivity by a certain algorithm.
++ *
++ * @IEEE80211_FEAT_TPC: Transmit power control. In case this is enabled the
++ * 	driver should accept setting transmit power to use per packet / mrr
++ * 	stage. Otherwise it should use its default tx power.
+  */
+ enum ieee80211_feature {
+ 	IEEE80211_FEAT_ADAPTIVE_SENSITIVITY = 0,
++	IEEE80211_FEAT_TPC,
+ };
+ 
+ /**

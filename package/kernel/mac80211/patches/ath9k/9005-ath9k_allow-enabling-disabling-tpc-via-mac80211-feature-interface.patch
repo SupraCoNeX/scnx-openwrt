@@ -1,0 +1,39 @@
+--- a/drivers/net/wireless/ath/ath9k/main.c
++++ b/drivers/net/wireless/ath/ath9k/main.c
+@@ -2806,9 +2806,13 @@ static void ath9k_set_ani(struct ieee802
+ static int
+ ath9k_get_feature_state(struct ieee80211_hw *hw, enum ieee80211_feature feature)
+ {
++	struct ath_softc *sc = hw->priv;
++
+ 	switch (feature) {
+ 	case IEEE80211_FEAT_ADAPTIVE_SENSITIVITY:
+ 		return (int)ath9k_get_ani(hw);
++	case IEEE80211_FEAT_TPC:
++		return sc->sc_ah->tpc_enabled;
+ 	default:
+ 		return -1;
+ 	}
+@@ -2818,10 +2822,22 @@ static int
+ ath9k_set_feature_state(struct ieee80211_hw *hw, enum ieee80211_feature feature,
+ 			bool enable)
+ {
++	struct ath_softc *sc = hw->priv;
++
+ 	switch (feature) {
+ 	case IEEE80211_FEAT_ADAPTIVE_SENSITIVITY:
+ 		ath9k_set_ani(hw, enable);
+ 		return 1;
++	case IEEE80211_FEAT_TPC:
++		if (enable != sc->sc_ah->tpc_enabled) {
++			sc->sc_ah->tpc_enabled = enable;
++
++			mutex_lock(&sc->mutex);
++			ath9k_set_txpower(sc, NULL);
++			mutex_unlock(&sc->mutex);
++		}
++
++		return 1;
+ 	default:
+ 		return -1;
+ 	}
