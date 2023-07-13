@@ -10,7 +10,7 @@
  		ieee80211_hw_set(hw, SUPPORTS_PS);
 --- a/drivers/net/wireless/ath/ath9k/main.c
 +++ b/drivers/net/wireless/ath/ath9k/main.c
-@@ -2782,6 +2782,27 @@ static int ath9k_get_txpower(struct ieee
+@@ -2782,6 +2782,51 @@ static int ath9k_get_txpower(struct ieee
  	return 0;
  }
  
@@ -35,13 +35,37 @@
 +        }
 +}
 +
++static int
++ath9k_get_feature_state(struct ieee80211_hw *hw, enum ieee80211_feature feature)
++{
++	switch (feature) {
++	case IEEE80211_FEAT_ADAPTIVE_SENSITIVITY:
++		return (int)ath9k_get_ani(hw);
++	default:
++		return -1;
++	}
++}
++
++static int
++ath9k_set_feature_state(struct ieee80211_hw *hw, enum ieee80211_feature feature,
++			bool enable)
++{
++	switch (feature) {
++	case IEEE80211_FEAT_ADAPTIVE_SENSITIVITY:
++		ath9k_set_ani(hw, enable);
++		return 1;
++	default:
++		return -1;
++	}
++}
++
  struct ieee80211_ops ath9k_ops = {
  	.tx 		    = ath9k_tx,
  	.start 		    = ath9k_start,
-@@ -2830,4 +2851,6 @@ struct ieee80211_ops ath9k_ops = {
+@@ -2830,4 +2875,6 @@ struct ieee80211_ops ath9k_ops = {
  	.sw_scan_complete   = ath9k_sw_scan_complete,
  	.get_txpower        = ath9k_get_txpower,
  	.wake_tx_queue      = ath9k_wake_tx_queue,
-+	.get_adaptive_sens  = ath9k_get_ani,
-+	.set_adaptive_sens  = ath9k_set_ani,
++	.get_feature_state  = ath9k_get_feature_state,
++	.set_feature_state  = ath9k_set_feature_state,
  };

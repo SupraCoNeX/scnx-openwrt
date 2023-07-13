@@ -8,28 +8,31 @@
  
  	/* per-STA commands */
  	STA_CMD_RC_MODE,
-@@ -388,6 +389,40 @@ orca_reset_sample_table(struct minstrel_
+@@ -388,6 +389,45 @@ orca_reset_sample_table(struct minstrel_
  }
  
  static int
 +orca_phy_set_feature(struct minstrel_priv *mp, char *args)
 +{
 +	struct ieee80211_local *local = hw_to_local(mp->hw);
-+	char *feature, *arg;
++	enum ieee80211_feature feature;
++	char *feature_str, *arg;
++	int res;
 +
 +	/* We need at least the feature name and one argument */
-+	feature = strsep(&args, ";");
++	feature_str = strsep(&args, ";");
 +	arg = strsep(&args, ";");
-+	if (!feature || !arg)
++	if (!feature_str || !arg)
 +		return -EINVAL;
 +
-+	if (!strcmp(feature, "adaptive_sens")) {
++	if (!strcmp(feature_str, "adaptive_sens")) {
 +		bool enabled;
 +
 +		if (!ieee80211_hw_check(mp->hw, ADAPTIVE_SENSITIVITY_CTRL) ||
-+		    !local->ops->set_adaptive_sens)
++		    !local->ops->set_feature_state)
 +			return -EPERM;
 +
++		feature = IEEE80211_FEAT_ADAPTIVE_SENSITIVITY;
 +		if (!strcmp(arg, "on"))
 +			enabled = true;
 +		else if (!strcmp(arg, "off"))
@@ -37,7 +40,9 @@
 +		else
 +			return -EINVAL;
 +
-+		local->ops->set_adaptive_sens(mp->hw, enabled);
++		res = local->ops->set_feature_state(mp->hw, feature, enabled);
++		if (!res)
++			return -EIO; /* TODO: more suitable error? */
 +	} else {
 +		return -EINVAL;
 +	}
@@ -49,7 +54,7 @@
  orca_sta_set_rc_mode(struct minstrel_ht_sta *mi, char *mode)
  {
  	int i;
-@@ -770,6 +805,9 @@ orca_exec_cmd(struct minstrel_priv *mp,
+@@ -770,6 +810,9 @@ orca_exec_cmd(struct minstrel_priv *mp,
  	case STA_CMD_PROBE:
  		err = orca_sta_cmd(mp, cmd, args);
  		break;
@@ -59,7 +64,7 @@
  	default:
  		err = -EINVAL;
  	}
-@@ -859,6 +897,8 @@ orca_control_write(struct file *file, co
+@@ -859,6 +902,8 @@ orca_control_write(struct file *file, co
  		cmd = STA_CMD_TPC_MODE;
  	} else if (!strcmp(cur, "reset_stats")) {
  		cmd = STA_CMD_RESET_STATS;
