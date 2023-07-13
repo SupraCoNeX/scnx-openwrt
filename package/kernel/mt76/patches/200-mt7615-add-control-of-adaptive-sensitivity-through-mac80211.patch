@@ -1,6 +1,6 @@
 --- a/mt7615/main.c
 +++ b/mt7615/main.c
-@@ -1325,6 +1325,25 @@ static void mt7615_set_rekey_data(struct
+@@ -1325,6 +1325,49 @@ static void mt7615_set_rekey_data(struct
  }
  #endif /* CONFIG_PM */
  
@@ -23,15 +23,39 @@
 +        	mt7615_mac_set_scs(ext_phy, enable);
 +}
 +
++static int mt7615_get_feature_state(struct ieee80211_hw *hw,
++				    enum ieee80211_feature feature)
++{
++	switch (feature) {
++	case IEEE80211_FEAT_ADAPTIVE_SENSITIVITY:
++		return (int)mt7615_get_scs(hw);
++	default:
++		return -1;
++	}
++}
++
++static int mt7615_set_feature_state(struct ieee80211_hw *hw,
++				    enum ieee80211_feature feature,
++				    bool enable)
++{
++	switch (feature) {
++	case IEEE80211_FEAT_ADAPTIVE_SENSITIVITY:
++		mt7615_set_scs(hw, enable);
++		return 1;
++	default:
++		return -1;
++	}
++}
++
  const struct ieee80211_ops mt7615_ops = {
  	.tx = mt7615_tx,
  	.start = mt7615_start,
-@@ -1372,6 +1391,8 @@ const struct ieee80211_ops mt7615_ops =
+@@ -1372,6 +1415,8 @@ const struct ieee80211_ops mt7615_ops =
  	.set_rekey_data = mt7615_set_rekey_data,
  #endif /* CONFIG_PM */
  	.set_sar_specs = mt7615_set_sar_specs,
-+	.get_adaptive_sens = mt7615_get_scs,
-+	.set_adaptive_sens = mt7615_set_scs,
++	.get_feature_state = mt7615_get_feature_state,
++	.set_feature_state = mt7615_set_feature_state,
  };
  EXPORT_SYMBOL_GPL(mt7615_ops);
  
