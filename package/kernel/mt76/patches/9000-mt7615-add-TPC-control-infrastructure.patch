@@ -1,0 +1,132 @@
+--- a/mt7615/mac.c
++++ b/mt7615/mac.c
+@@ -732,6 +732,8 @@ int mt7615_mac_write_txwi(struct mt7615_
+ 	__le16 fc = hdr->frame_control;
+ 	int tx_count = 8;
+ 	u16 seqno = 0;
++	s16 txpower_idx = -1;	/* holds TX power index given by mac80211 */
++	s8 txwi_power_ofs = 0;
+ 
+ 	if (vif) {
+ 		struct mt76_vif *mvif = (struct mt76_vif *)vif->drv_priv;
+@@ -744,6 +746,7 @@ int mt7615_mac_write_txwi(struct mt7615_
+ 		struct mt7615_sta *msta = (struct mt7615_sta *)sta->drv_priv;
+ 
+ 		tx_count = msta->rate_count;
++		txpower_idx = msta->tx_power;
+ 	}
+ 
+ 	if (phy_idx && dev->mt76.phys[MT_BAND1])
+@@ -794,6 +797,15 @@ int mt7615_mac_write_txwi(struct mt7615_
+ 	} else {
+ 		txwi[3] = 0;
+ 	}
++
++	if (!ieee80211_is_beacon(fc) && dev->phy.tpc_en) {
++		if (info->flags & IEEE80211_TX_CTL_RATE_CTRL_PROBE)
++			txpower_idx = info->control.txpower_idx;
++
++		/* txwi range starts at -16, TX power indices at 0 */
++		txwi_power_ofs = (txpower_idx >= 0) ? txpower_idx - 16 : 0;
++		val |= FIELD_PREP(MT_TXD2_POWER_OFFSET, txwi_power_ofs);
++	}
+ 	txwi[2] = cpu_to_le32(val);
+ 
+ 	if (!(info->flags & IEEE80211_TX_CTL_AMPDU))
+--- a/mt7615/main.c
++++ b/mt7615/main.c
+@@ -733,6 +733,9 @@ static void mt7615_sta_rate_tbl_update(s
+ 		msta->rates[i].count = sta_rates->rate[i].count;
+ 		msta->rates[i].flags = sta_rates->rate[i].flags;
+ 
++		if (!i)
++			msta->tx_power = sta_rates->rate[i].txpower_idx;
++
+ 		if (msta->rates[i].idx < 0 || !msta->rates[i].count)
+ 			break;
+ 	}
+--- a/mt7615/mt7615.h
++++ b/mt7615/mt7615.h
+@@ -128,6 +128,7 @@ struct mt7615_sta {
+ 	u32 airtime_ac[8];
+ 
+ 	struct ieee80211_tx_rate rates[4];
++	s16 tx_power;
+ 
+ 	struct mt7615_rate_set rateset[2];
+ 	u32 rate_set_tsf;
+@@ -167,6 +168,7 @@ struct mt7615_phy {
+ 	u16 noise;
+ 
+ 	bool scs_en;
++	bool tpc_en;
+ 
+ 	unsigned long last_cca_adj;
+ 	int false_cca_ofdm, false_cca_cck;
+--- a/mt7615/debugfs.c
++++ b/mt7615/debugfs.c
+@@ -93,6 +93,29 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_scs, mt761
+ 			 mt7615_scs_set, "%lld\n");
+ 
+ static int
++mt7615_tpc_get(void *data, u64 *val)
++{
++	struct mt7615_dev *dev = data;
++
++	*val = dev->phy.tpc_en;
++
++	return 0;
++}
++
++static int
++mt7615_tpc_set(void *data, u64 val)
++{
++	struct mt7615_dev *dev = data;
++
++	dev->phy.tpc_en = !!val;
++
++	return 0;
++}
++
++DEFINE_DEBUGFS_ATTRIBUTE(fops_tpc, mt7615_tpc_get,
++			 mt7615_tpc_set, "%lld\n");
++
++static int
+ mt7615_force_rate_retry_set(void *data, u64 val)
+ {
+ 	struct mt7615_dev *dev = data;
+@@ -591,6 +614,7 @@ int mt7615_init_debugfs(struct mt7615_de
+ 	debugfs_create_file("force_rate_retry", 0600, dir, dev, &fops_force_rate_retry);
+ 	debugfs_create_file("ampdu_stat", 0400, dir, dev, &mt7615_ampdu_stat_fops);
+ 	debugfs_create_file("scs", 0600, dir, dev, &fops_scs);
++	debugfs_create_file("tpc", 0600, dir, dev, &fops_tpc);
+ 	debugfs_create_file("dbdc", 0600, dir, dev, &fops_dbdc);
+ 	debugfs_create_file("fw_debug", 0600, dir, dev, &fops_fw_debug);
+ 	debugfs_create_file("runtime-pm", 0600, dir, dev, &fops_pm);
+--- a/mt7615/init.c
++++ b/mt7615/init.c
+@@ -353,6 +353,13 @@ mt7615_regd_notifier(struct wiphy *wiphy
+ 	mt7615_mutex_release(dev);
+ }
+ 
++struct ieee80211_hw_txpower_range mt7615_txpower_range = {
++	.start_idx = 0,
++	.start_pwr = -16,
++	.n_levels = 32,
++	.pwr_step = 2,
++};
++
+ static void
+ mt7615_init_wiphy(struct ieee80211_hw *hw)
+ {
+@@ -402,6 +409,10 @@ mt7615_init_wiphy(struct ieee80211_hw *h
+ 	ieee80211_hw_set(hw, WANT_MONITOR_VIF);
+ 	ieee80211_hw_set(hw, SUPPORTS_RX_DECAP_OFFLOAD);
+ 	ieee80211_hw_set(hw, SUPPORTS_VHT_EXT_NSS_BW);
++	ieee80211_hw_set(hw, SUPPORTS_TPC_PER_PACKET);
++
++	hw->txpower_ranges = &mt7615_txpower_range;
++	hw->n_txpower_ranges = 1;
+ 
+ 	if (is_mt7615(&phy->dev->mt76))
+ 		hw->max_tx_fragments = MT_TXP_MAX_BUF_NUM;
