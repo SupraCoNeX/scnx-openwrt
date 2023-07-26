@@ -1,0 +1,31 @@
+--- a/net/mac80211/orca_uapi.c
++++ b/net/mac80211/orca_uapi.c
+@@ -177,6 +177,8 @@ orca_read_phy_info(struct seq_file *s, v
+ 	struct sta_info *sta_info;
+ 	struct minstrel_priv *mp = local->rate_ctrl->priv;
+ 	struct minstrel_ht_sta *mi;
++	char tmp[32] = {};
++	int ofs = 0;
+ 	int i = 0;
+ 
+ 	seq_printf(s, "drv;%s\n", wiphy_dev(wiphy)->driver->name);
+@@ -211,6 +213,19 @@ orca_read_phy_info(struct seq_file *s, v
+ 	seq_printf(s, "\n");
+ 
+ skip_tpc:
++
++	if (mp->monitor & ORCA_MONITOR_TXS)
++		ofs += sprintf(tmp, "txs,");
++	if (mp->monitor & ORCA_MONITOR_RXS)
++		ofs += sprintf(tmp + ofs, "rxs,");
++	if (mp->monitor & ORCA_MONITOR_STATS)
++		ofs += sprintf(tmp + ofs, "stats,");
++	if (mp->monitor & ORCA_ECHO_TPRC)
++		ofs += sprintf(tmp + ofs, "tprc_echo,");
++
++	tmp[strlen(tmp) - 1] = 0;
++	seq_printf(s, "mon;%s\n", tmp);
++
+ 	/* keep this block last! */
+ 	rcu_read_lock();
+ 	list_for_each_entry_rcu(mi, &mp->stations, list) {
