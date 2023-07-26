@@ -226,7 +226,7 @@
  
 --- a/net/mac80211/rc80211_minstrel_ht.h
 +++ b/net/mac80211/rc80211_minstrel_ht.h
-@@ -72,10 +72,11 @@
+@@ -72,10 +72,10 @@
  #define MINSTREL_SAMPLE_RATES		5 /* rates per sample type */
  #define MINSTREL_SAMPLE_INTERVAL	(HZ / 50)
  
@@ -234,15 +234,14 @@
 -#define MINSTREL_MONITOR_TXS		BIT(1)
 -#define MINSTREL_MONITOR_RXS		BIT(2)
 -#define MINSTREL_MONITOR_STATS		BIT(3)
-+#define ORCA_MONITOR_STA		BIT(0)
-+#define ORCA_MONITOR_TXS		BIT(1)
-+#define ORCA_MONITOR_RXS		BIT(2)
-+#define ORCA_MONITOR_STATS		BIT(3)
++#define ORCA_MONITOR_TXS		BIT(0)
++#define ORCA_MONITOR_RXS		BIT(1)
++#define ORCA_MONITOR_STATS		BIT(2)
 +#define ORCA_ECHO_TPRC			BIT(7)
  
  struct minstrel_priv {
  	struct ieee80211_hw *hw;
-@@ -99,7 +100,7 @@ struct minstrel_priv {
+@@ -99,7 +99,7 @@ struct minstrel_priv {
  	u32 fixed_rate_idx;
  	unsigned int sampling_interval;
  #endif
@@ -251,7 +250,7 @@
  	struct rchan *relay_ev;
  	spinlock_t relay_lock;
  
-@@ -107,7 +108,6 @@ struct minstrel_priv {
+@@ -107,7 +107,6 @@ struct minstrel_priv {
  	spinlock_t sta_wlock;
  
  	u8 monitor;
@@ -259,7 +258,7 @@
  #endif
  };
  
-@@ -169,11 +169,15 @@ struct minstrel_sample_category {
+@@ -169,11 +168,15 @@ struct minstrel_sample_category {
  };
  
  struct minstrel_ht_sta {
@@ -276,7 +275,7 @@
  #endif
  	struct ieee80211_sta *sta;
  	spinlock_t lock;
-@@ -221,113 +225,121 @@ struct minstrel_ht_sta {
+@@ -221,113 +224,121 @@ struct minstrel_ht_sta {
  
  void minstrel_ht_add_sta_debugfs(void *priv, void *priv_sta, struct dentry *dir);
  
@@ -451,7 +450,7 @@
  #else
  	return false;
  #endif
-@@ -338,6 +350,8 @@ void minstrel_ht_set_rate(struct minstre
+@@ -338,6 +349,8 @@ void minstrel_ht_set_rate(struct minstre
  						  int index);
  int minstrel_ht_get_tp_avg(struct minstrel_ht_sta *mi, int group, int rate,
  			   int prob_avg);
@@ -520,7 +519,7 @@
  
 --- /dev/null
 +++ b/net/mac80211/orca_uapi.c
-@@ -0,0 +1,1075 @@
+@@ -0,0 +1,1071 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * ORCA - Open-Source Resource Control API
@@ -846,8 +845,6 @@
 +			mask |= ORCA_MONITOR_TXS;
 +		else if (!strcmp(cur, "rxs"))
 +			mask |= ORCA_MONITOR_RXS;
-+		else if (!strcmp(cur, "sta"))
-+			mask |= ORCA_MONITOR_STA;
 +		else if (!strcmp(cur, "stats"))
 +			mask |= ORCA_MONITOR_STATS;
 +		else if (!strcmp(cur, "tprc_echo"))
@@ -859,7 +856,7 @@
 +
 +	if (!mp->monitor)
 +		orca_dump_stations(mp, "add");
-+	mp->monitor = mask | ORCA_MONITOR_STA;
++	mp->monitor = mask;
 +}
 +
 +static void
@@ -880,8 +877,6 @@
 +			mask &= ~ORCA_MONITOR_TXS;
 +		else if (!strcmp(cur, "rxs"))
 +			mask &= ~ORCA_MONITOR_RXS;
-+		else if (!strcmp(cur, "sta"))
-+			mask &= ~ORCA_MONITOR_STA;
 +		else if (!strcmp(cur, "stats"))
 +			mask &= ~ORCA_MONITOR_STATS;
 +		else if (!strcmp(cur, "tprc_echo"))
