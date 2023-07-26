@@ -1,6 +1,6 @@
 --- a/net/mac80211/orca_uapi.c
 +++ b/net/mac80211/orca_uapi.c
-@@ -416,6 +416,7 @@ orca_phy_set_feature(struct minstrel_pri
+@@ -412,6 +412,7 @@ orca_phy_set_feature(struct minstrel_pri
  	enum ieee80211_feature feature;
  	char *feature_str, *arg;
  	int res;
@@ -8,7 +8,7 @@
  
  	/* We need at least the feature name and one argument */
  	feature_str = strsep(&args, ";");
-@@ -423,28 +424,34 @@ orca_phy_set_feature(struct minstrel_pri
+@@ -419,28 +420,34 @@ orca_phy_set_feature(struct minstrel_pri
  	if (!feature_str || !arg)
  		return -EINVAL;
  
