@@ -12,7 +12,7 @@
  	int i = 0;
  
  	seq_printf(s, "drv;%s\n", wiphy_dev(wiphy)->driver->name);
-@@ -213,22 +214,55 @@ orca_read_phy_info(struct seq_file *s, v
+@@ -213,22 +214,53 @@ orca_read_phy_info(struct seq_file *s, v
  	seq_printf(s, "\n");
  
  skip_tpc:
@@ -43,16 +43,14 @@
 +
 +	tmp_on[0] = 0;
 +	ofs_on = 0;
-+	if (ieee80211_hw_check(mp->hw, ADAPTIVE_SENSITIVITY_CTRL)) {
-+		if (local->ops->get_feature_state(mp->hw, IEEE80211_FEAT_ADAPTIVE_SENSITIVITY))
++	if (mp->hw->feature_ctrl & IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY) {
++		if (local->ops->get_feature_state(mp->hw, IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY))
 +			ofs_on += sprintf(tmp_on, "adaptive_sens,");
 +		else
 +			ofs_off += sprintf(tmp_off, "adaptive_sens,");
 +	}
-+	if (ieee80211_hw_check(mp->hw, SUPPORTS_TPC_PER_PACKET) ||
-+	    ieee80211_hw_check(mp->hw, SUPPORTS_TPC_PER_MRR))
-+	{
-+		if (local->ops->get_feature_state(mp->hw, IEEE80211_FEAT_TPC))
++	if (mp->hw->feature_ctrl & IEEE80211_FTRCTRL_TPC) {
++		if (local->ops->get_feature_state(mp->hw, IEEE80211_FTRCTRL_TPC))
 +			ofs_on += sprintf(tmp_on + ofs_on, "tpc,");
 +		else
 +			ofs_off += sprintf(tmp_off + ofs_off, "tpc,");
