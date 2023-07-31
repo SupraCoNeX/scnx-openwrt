@@ -1,57 +1,11 @@
 --- a/net/mac80211/orca_uapi.c
 +++ b/net/mac80211/orca_uapi.c
-@@ -412,6 +412,7 @@ orca_phy_set_feature(struct minstrel_pri
- 	enum ieee80211_feature feature;
- 	char *feature_str, *arg;
- 	int res;
-+	bool enable;
+@@ -432,6 +432,8 @@ orca_phy_set_feature(struct minstrel_pri
  
- 	/* We need at least the feature name and one argument */
- 	feature_str = strsep(&args, ";");
-@@ -419,28 +420,34 @@ orca_phy_set_feature(struct minstrel_pri
- 	if (!feature_str || !arg)
- 		return -EINVAL;
- 
--	if (!strcmp(feature_str, "adaptive_sens")) {
--		bool enabled;
-+	if (!strcmp(arg, "on"))
-+		enable = true;
-+	else if (!strcmp(arg, "off"))
-+		enable = false;
-+	else
-+		return -EINVAL;
- 
-+	if (!strcmp(feature_str, "adaptive_sens")) {
- 		if (!ieee80211_hw_check(mp->hw, ADAPTIVE_SENSITIVITY_CTRL) ||
- 		    !local->ops->set_feature_state)
- 			return -EPERM;
- 
- 		feature = IEEE80211_FEAT_ADAPTIVE_SENSITIVITY;
--		if (!strcmp(arg, "on"))
--			enabled = true;
--		else if (!strcmp(arg, "off"))
--			enabled = false;
--		else
--			return -EINVAL;
--
--		res = local->ops->set_feature_state(mp->hw, feature, enabled);
--		if (!res)
--			return -EIO; /* TODO: more suitable error? */
-+		res = local->ops->set_feature_state(mp->hw, feature, enable);
-+	} else if (!strcmp(feature_str, "tpc")) {
-+		if (!ieee80211_hw_check(mp->hw, SUPPORTS_TPC_PER_PACKET) &&
-+		    !ieee80211_hw_check(mp->hw, SUPPORTS_TPC_PER_MRR))
-+			return -EPERM;
-+
-+		feature = IEEE80211_FEAT_TPC;
-+		res = local->ops->set_feature_state(mp->hw, feature, enable);
- 	} else {
- 		return -EINVAL;
- 	}
- 
-+	if (!res)
-+		return -EIO; /* TODO: more suitable error? */
-+
- 	return 0;
- }
+ 	if (!strcmp(feature_str, "adaptive_sens"))
+ 		feature = IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY;
++	else if (!strcmp(feature_str, "tpc"))
++		feature = IEEE80211_FTRCTRL_TPC;
+ 	else
+ 		return -ENOENT;
  

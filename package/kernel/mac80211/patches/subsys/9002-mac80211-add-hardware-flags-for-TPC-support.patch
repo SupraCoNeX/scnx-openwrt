@@ -17,9 +17,9 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
 
 --- a/include/net/mac80211.h
 +++ b/include/net/mac80211.h
-@@ -2648,6 +2648,13 @@ struct ieee80211_txq {
-  * 	adaptive sensitivity feature (e.g. ath9k: ANI, mt76: SCS) AND allows
-  * 	the stack to enable/disable it dynamically.
+@@ -2644,6 +2644,13 @@ struct ieee80211_txq {
+  * @IEEE80211_HW_MLO_MCAST_MULTI_LINK_TX: Hardware/driver handles transmitting
+  *	multicast frames on all links, mac80211 should not do that.
   *
 + * @IEEE80211_HW_SUPPORTS_TPC_PER_PACKET: The hardware/driver supports transmit
 + * 	power control (TPC) with one power level per packet.
@@ -31,10 +31,10 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
   * @NUM_IEEE80211_HW_FLAGS: number of hardware flags, used for sizing arrays
   */
  enum ieee80211_hw_flags {
-@@ -2706,6 +2713,8 @@ enum ieee80211_hw_flags {
+@@ -2701,6 +2708,8 @@ enum ieee80211_hw_flags {
+ 	IEEE80211_HW_SUPPORTS_CONC_MON_RX_DECAP,
  	IEEE80211_HW_DETECTS_COLOR_COLLISION,
  	IEEE80211_HW_MLO_MCAST_MULTI_LINK_TX,
- 	IEEE80211_HW_ADAPTIVE_SENSITIVITY_CTRL,
 +	IEEE80211_HW_SUPPORTS_TPC_PER_PACKET,
 +	IEEE80211_HW_SUPPORTS_TPC_PER_MRR,
  
@@ -42,10 +42,10 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
  	NUM_IEEE80211_HW_FLAGS
 --- a/net/mac80211/debugfs.c
 +++ b/net/mac80211/debugfs.c
-@@ -497,6 +497,8 @@ static const char *hw_flag_names[] = {
+@@ -496,6 +496,8 @@ static const char *hw_flag_names[] = {
+ 	FLAG(SUPPORTS_CONC_MON_RX_DECAP),
  	FLAG(DETECTS_COLOR_COLLISION),
  	FLAG(MLO_MCAST_MULTI_LINK_TX),
- 	FLAG(ADAPTIVE_SENSITIVITY_CTRL),
 +	FLAG(SUPPORTS_TPC_PER_PACKET),
 +	FLAG(SUPPORTS_TPC_PER_MRR),
  #undef FLAG

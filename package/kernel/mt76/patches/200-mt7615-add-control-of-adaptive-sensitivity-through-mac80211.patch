@@ -1,6 +1,6 @@
 --- a/mt7615/main.c
 +++ b/mt7615/main.c
-@@ -1325,6 +1325,49 @@ static void mt7615_set_rekey_data(struct
+@@ -1325,6 +1325,53 @@ static void mt7615_set_rekey_data(struct
  }
  #endif /* CONFIG_PM */
  
@@ -10,38 +10,42 @@
 +	return dev->phy.scs_en;
 +}
 +
-+static void mt7615_set_scs(struct ieee80211_hw *hw, bool enable) {
-+	struct mt7615_dev *dev = mt7615_hw_dev(hw);
++static int mt7615_set_scs(struct mt7615_dev *dev, bool enable) {
 +	struct mt7615_phy *ext_phy;
 +
 +	if (!mt7615_wait_for_mcu_init(dev))
-+        	return;
++        	return 1;
 +
 +	mt7615_mac_set_scs(&dev->phy, enable);
 +	ext_phy = mt7615_ext_phy(dev);
 +	if (ext_phy)
 +        	mt7615_mac_set_scs(ext_phy, enable);
++
++	return 0;
 +}
 +
 +static int mt7615_get_feature_state(struct ieee80211_hw *hw,
-+				    enum ieee80211_feature feature)
++				    enum ieee80211_feature_ctrl feature)
 +{
++	struct mt7615_dev *dev = mt7615_hw_dev(hw);
++
 +	switch (feature) {
-+	case IEEE80211_FEAT_ADAPTIVE_SENSITIVITY:
-+		return (int)mt7615_get_scs(hw);
++	case IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY:
++		return dev->phy.scs_en;
 +	default:
 +		return -1;
 +	}
 +}
 +
 +static int mt7615_set_feature_state(struct ieee80211_hw *hw,
-+				    enum ieee80211_feature feature,
++				    enum ieee80211_feature_ctrl feature,
 +				    bool enable)
 +{
++	struct mt7615_dev *dev = mt7615_hw_dev(hw);
++
 +	switch (feature) {
-+	case IEEE80211_FEAT_ADAPTIVE_SENSITIVITY:
-+		mt7615_set_scs(hw, enable);
-+		return 1;
++	case IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY:
++		return mt7615_set_scs(dev, enable);
 +	default:
 +		return -1;
 +	}
@@ -50,7 +54,7 @@
  const struct ieee80211_ops mt7615_ops = {
  	.tx = mt7615_tx,
  	.start = mt7615_start,
-@@ -1372,6 +1415,8 @@ const struct ieee80211_ops mt7615_ops =
+@@ -1372,6 +1419,8 @@ const struct ieee80211_ops mt7615_ops =
  	.set_rekey_data = mt7615_set_rekey_data,
  #endif /* CONFIG_PM */
  	.set_sar_specs = mt7615_set_sar_specs,
@@ -61,11 +65,12 @@
  
 --- a/mt7615/init.c
 +++ b/mt7615/init.c
-@@ -405,6 +405,7 @@ mt7615_init_wiphy(struct ieee80211_hw *h
- 	ieee80211_hw_set(hw, WANT_MONITOR_VIF);
- 	ieee80211_hw_set(hw, SUPPORTS_RX_DECAP_OFFLOAD);
- 	ieee80211_hw_set(hw, SUPPORTS_VHT_EXT_NSS_BW);
-+	ieee80211_hw_set(hw, ADAPTIVE_SENSITIVITY_CTRL);
+@@ -415,6 +415,8 @@ mt7615_init_wiphy(struct ieee80211_hw *h
+ 	phy->mt76->sband_5g.sband.ht_cap.cap |= IEEE80211_HT_CAP_LDPC_CODING;
+ 	phy->mt76->sband_5g.sband.vht_cap.cap |=
+ 			IEEE80211_VHT_CAP_MAX_A_MPDU_LENGTH_EXPONENT_MASK;
++
++	hw->feature_ctrl = IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY;
+ }
  
- 	if (is_mt7615(&phy->dev->mt76))
- 		hw->max_tx_fragments = MT_TXP_MAX_BUF_NUM;
+ static void

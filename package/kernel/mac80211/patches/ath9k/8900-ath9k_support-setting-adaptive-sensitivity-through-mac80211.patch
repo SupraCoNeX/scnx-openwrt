@@ -1,29 +1,21 @@
 --- a/drivers/net/wireless/ath/ath9k/init.c
 +++ b/drivers/net/wireless/ath/ath9k/init.c
-@@ -974,6 +974,7 @@ static void ath9k_set_hw_capab(struct at
- 	ieee80211_hw_set(hw, SUPPORT_FAST_XMIT);
- 	ieee80211_hw_set(hw, SUPPORTS_CLONED_SKBS);
- 	ieee80211_hw_set(hw, MFP_CAPABLE);
-+	ieee80211_hw_set(hw, ADAPTIVE_SENSITIVITY_CTRL);
+@@ -1026,6 +1026,8 @@ static void ath9k_set_hw_capab(struct at
+ 	hw->txq_data_size = sizeof(struct ath_atx_tid);
+ 	hw->extra_tx_headroom = 4;
  
- 	if (ath9k_ps_enable)
- 		ieee80211_hw_set(hw, SUPPORTS_PS);
++	hw->feature_ctrl = IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY;
++
+ 	hw->wiphy->available_antennas_rx = BIT(ah->caps.max_rxchains) - 1;
+ 	hw->wiphy->available_antennas_tx = BIT(ah->caps.max_txchains) - 1;
+ 
 --- a/drivers/net/wireless/ath/ath9k/main.c
 +++ b/drivers/net/wireless/ath/ath9k/main.c
-@@ -2782,6 +2782,51 @@ static int ath9k_get_txpower(struct ieee
+@@ -2782,6 +2782,50 @@ static int ath9k_get_txpower(struct ieee
  	return 0;
  }
  
-+
-+static bool ath9k_get_ani(struct ieee80211_hw *hw) {
-+	struct ath_softc *sc = hw->priv;
-+	struct ath_common *common = &sc->sc_ah->common;
-+
-+	return !common->disable_ani;
-+}
-+
-+static void ath9k_set_ani(struct ieee80211_hw *hw, bool enable) {
-+	struct ath_softc *sc = hw->priv;
++static void ath9k_set_ani(struct ath_softc *sc, bool enable) {
 +	struct ath_common *common = &sc->sc_ah->common;
 +
 +	common->disable_ani = !enable;
@@ -36,33 +28,41 @@
 +}
 +
 +static int
-+ath9k_get_feature_state(struct ieee80211_hw *hw, enum ieee80211_feature feature)
++ath9k_get_feature_state(struct ieee80211_hw *hw,
++			enum ieee80211_feature_ctrl feature)
 +{
++	struct ath_softc *sc = hw->priv;
++
 +	switch (feature) {
-+	case IEEE80211_FEAT_ADAPTIVE_SENSITIVITY:
-+		return (int)ath9k_get_ani(hw);
++	case IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY:
++		return !(sc->sc_ah->common.disable_ani);
 +	default:
 +		return -1;
 +	}
 +}
 +
 +static int
-+ath9k_set_feature_state(struct ieee80211_hw *hw, enum ieee80211_feature feature,
++ath9k_set_feature_state(struct ieee80211_hw *hw,
++			enum ieee80211_feature_ctrl feature,
 +			bool enable)
 +{
++	struct ath_softc *sc = hw->priv;
++
 +	switch (feature) {
-+	case IEEE80211_FEAT_ADAPTIVE_SENSITIVITY:
-+		ath9k_set_ani(hw, enable);
-+		return 1;
++	case IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY:
++		ath9k_set_ani(sc, enable);
++		break;
 +	default:
 +		return -1;
 +	}
++
++	return 1;
 +}
 +
  struct ieee80211_ops ath9k_ops = {
  	.tx 		    = ath9k_tx,
  	.start 		    = ath9k_start,
-@@ -2830,4 +2875,6 @@ struct ieee80211_ops ath9k_ops = {
+@@ -2830,4 +2874,6 @@ struct ieee80211_ops ath9k_ops = {
  	.sw_scan_complete   = ath9k_sw_scan_complete,
  	.get_txpower        = ath9k_get_txpower,
  	.wake_tx_queue      = ath9k_wake_tx_queue,
