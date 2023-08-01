@@ -1,49 +1,194 @@
+--- a/net/mac80211/rx.c
++++ b/net/mac80211/rx.c
+@@ -32,6 +32,7 @@
+ #include "tkip.h"
+ #include "wme.h"
+ #include "rate.h"
++#include "rc80211_minstrel_ht.h"
+ 
+ /*
+  * monitor mode reception
+@@ -1795,6 +1796,12 @@ ieee80211_rx_h_sta_process(struct ieee80
+ 		}
+ 	}
+ 
++	if (rx->local->rate_ctrl && test_sta_flag(sta, WLAN_STA_RATE_CONTROL)) {
++		orca_report_rx_status(rx->local->rate_ctrl->priv, sta->addr,
++			(!(status->flag & RX_FLAG_NO_SIGNAL_VAL) ? status->signal : -1),
++			status->chains, status->chain_signal);
++	}
++
+ 	if (ieee80211_is_s1g_beacon(hdr->frame_control))
+ 		return RX_CONTINUE;
+ 
+--- a/local-symbols
++++ b/local-symbols
+@@ -41,6 +41,7 @@ LIB80211_DEBUG=
+ MAC80211=
+ MAC80211_HAS_RC=
+ MAC80211_RC_MINSTREL=
++MAC80211_ORCA_UAPI=
+ MAC80211_RC_DEFAULT_MINSTREL=
+ MAC80211_RC_DEFAULT=
+ MAC80211_MESH=
+--- a/net/mac80211/Kconfig
++++ b/net/mac80211/Kconfig
+@@ -98,6 +98,15 @@ config MAC80211_MESSAGE_TRACING
+ 	  need to be present in the binary and formatted at
+ 	  runtime for tracing.
+ 
++config MAC80211_ORCA_UAPI
++        bool "ORCA Userspace API"
++        depends on MAC80211_RC_MINSTREL
++        depends on MAC80211_DEBUGFS
++        select RELAY
++        help
++          This option creates debugfs files that allow user space to observe
++          and/or control minstrel rate selection behavior
++
+ menuconfig MAC80211_DEBUG_MENU
+ 	bool "Select mac80211 debugging features"
+ 	depends on MAC80211
+--- a/net/mac80211/Makefile
++++ b/net/mac80211/Makefile
+@@ -63,6 +63,9 @@ rc80211_minstrel-y := \
+ rc80211_minstrel-$(CPTCFG_MAC80211_DEBUGFS) += \
+ 	rc80211_minstrel_ht_debugfs.o
+ 
++rc80211_minstrel-$(CPTCFG_MAC80211_ORCA_UAPI) += \
++	orca_uapi.o
++
+ mac80211-$(CPTCFG_MAC80211_RC_MINSTREL) += $(rc80211_minstrel-y)
+ 
+ ccflags-y += -DDEBUG
 --- a/net/mac80211/rc80211_minstrel_ht.c
 +++ b/net/mac80211/rc80211_minstrel_ht.c
-@@ -274,10 +274,6 @@ static const u8 minstrel_sample_seq[] =
+@@ -264,7 +264,7 @@ const struct mcs_group minstrel_mcs_grou
+ 
+ const s16 minstrel_cck_bitrates[4] = { 10, 20, 55, 110 };
+ const s16 minstrel_ofdm_bitrates[8] = { 60, 90, 120, 180, 240, 360, 480, 540 };
+-static u8 sample_table[SAMPLE_COLUMNS][MCS_GROUP_RATES] __read_mostly;
++u8 sample_table[SAMPLE_COLUMNS][MCS_GROUP_RATES] __read_mostly;
+ static const u8 minstrel_sample_seq[] = {
+ 	MINSTREL_SAMPLE_TYPE_INC,
+ 	MINSTREL_SAMPLE_TYPE_JUMP,
+@@ -274,9 +274,6 @@ static const u8 minstrel_sample_seq[] =
  	MINSTREL_SAMPLE_TYPE_SLOW,
  };
  
 -static void
--minstrel_ht_update_rates(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
--			 bool force);
+-minstrel_ht_update_rates(struct minstrel_priv *mp, struct minstrel_ht_sta *mi);
 -
  /*
   * Some VHT MCSes are invalid (when Ndbps / Nes is not an integer)
   * e.g for MCS9@20MHzx1Nss: Ndbps=8x52*(5/6) Nes=1
-@@ -1105,7 +1101,7 @@ minstrel_ht_update_stats(struct minstrel
- 			changed = mrs->attempts > 0;
+@@ -368,7 +365,7 @@ minstrel_vht_ri_get_group_idx(struct rat
+ 
+ static struct minstrel_rate_stats *
+ minstrel_ht_get_stats(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
+-		      struct ieee80211_tx_rate *rate)
++		      struct ieee80211_tx_rate *rate, u16 *dest_idx)
+ {
+ 	int group, idx;
+ 
+@@ -406,6 +403,7 @@ minstrel_ht_get_stats(struct minstrel_pr
+ 
+ 	idx = 0;
+ out:
++	*dest_idx = MI_RATE(group, idx);
+ 	return &mi->groups[group].rates[idx];
+ }
+ 
+@@ -414,7 +412,8 @@ out:
+  */
+ static struct minstrel_rate_stats *
+ minstrel_ht_ri_get_stats(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
+-			  struct ieee80211_rate_status *rate_status)
++			 struct ieee80211_rate_status *rate_status,
++			 u16 *dest_idx)
+ {
+ 	int group, idx;
+ 	struct rate_info *rate = &rate_status->rate_idx;
+@@ -450,6 +449,7 @@ minstrel_ht_ri_get_stats(struct minstrel
+ 
+ 	idx = 0;
+ out:
++	*dest_idx = MI_RATE(group, idx);
+ 	return &mi->groups[group].rates[idx];
+ }
+ 
+@@ -1025,7 +1025,7 @@ minstrel_ht_refill_sample_rates(struct m
+  *  - as long as the max prob rate has a probability of more than 75%, pick
+  *    higher throughput rates, even if the probablity is a bit lower
+  */
+-static void
++void
+ minstrel_ht_update_stats(struct minstrel_priv *mp, struct minstrel_ht_sta *mi)
+ {
+ 	struct minstrel_mcs_group_data *mg;
+@@ -1089,6 +1089,8 @@ minstrel_ht_update_stats(struct minstrel
+ 			tp_rate = tmp_legacy_tp_rate;
+ 
+ 		for (i = MCS_GROUP_RATES - 1; i >= 0; i--) {
++			bool changed;
++
+ 			if (!(mi->supported[group] & BIT(i)))
+ 				continue;
+ 
+@@ -1096,7 +1098,11 @@ minstrel_ht_update_stats(struct minstrel
+ 
+ 			mrs = &mg->rates[i];
+ 			mrs->retry_updated = false;
++			changed = mrs->attempts > 0;
  			minstrel_ht_calc_rate_stats(mp, mrs);
- 			if (changed)
--				minstrel_ht_report_rate_update(mp, mi, index,
++			if (changed)
 +				orca_report_rate_update(mp, mi, index,
- 							       mrs);
++							       mrs);
  
  			if (mrs->att_hist)
-@@ -1155,11 +1151,11 @@ minstrel_ht_update_stats(struct minstrel
+ 				last_prob = max(last_prob, mrs->prob_avg);
+@@ -1145,7 +1151,12 @@ minstrel_ht_update_stats(struct minstrel
  
  	mi->max_prob_rate = tmp_max_prob_rate;
  
--	minstrel_ht_report_best_rates(mp, mi);
+-	minstrel_ht_refill_sample_rates(mi);
 +	orca_report_best_rates(mp, mi);
- 
--	if (!minstrel_ht_manual_mode(mp)) {
++
 +	if (!orca_sta_rc_manual_mode(mi)) {
- 		minstrel_ht_refill_sample_rates(mi);
--		minstrel_ht_report_sample_rates(mp, mi);
++		minstrel_ht_refill_sample_rates(mi);
 +		orca_report_sample_rates(mp, mi);
- 	}
++	}
  
  #ifdef CPTCFG_MAC80211_DEBUGFS
-@@ -1269,6 +1265,7 @@ minstrel_ht_tx_status(void *priv, struct
+ 	/* use fixed index if set */
+@@ -1253,6 +1264,8 @@ minstrel_ht_tx_status(void *priv, struct
+ 	struct minstrel_priv *mp = priv;
  	u32 update_interval = mp->update_interval;
  	bool last, update = false;
- 	u16 rate_list[IEEE80211_TX_MAX_RATES] = {};
++	u16 rate_list[IEEE80211_TX_MAX_RATES] = {};
 +	s16 txpwr_list[IEEE80211_TX_MAX_RATES] = {};
  	int i;
  
  	/* Ignore packet that was sent with noAck flag */
-@@ -1317,6 +1314,7 @@ minstrel_ht_tx_status(void *priv, struct
+@@ -1270,6 +1283,8 @@ minstrel_ht_tx_status(void *priv, struct
+ 		info->status.ampdu_len = 1;
+ 	}
+ 
++	spin_lock_bh(&mi->lock);
++
+ 	/* wraparound */
+ 	if (mi->total_packets >= ~0 - info->status.ampdu_len) {
+ 		mi->total_packets = 0;
+@@ -1291,13 +1306,15 @@ minstrel_ht_tx_status(void *priv, struct
+ 							&(st->rates[i + 1]));
+ 
+ 			rate = minstrel_ht_ri_get_stats(mp, mi,
+-							&(st->rates[i]));
++							&(st->rates[i]),
++							&rate_list[i]);
+ 
+ 			if (last)
+ 				rate->success += info->status.ampdu_ack_len;
  
  			rate->attempts += st->rates[i].try_count *
  					  info->status.ampdu_len;
@@ -51,7 +196,14 @@
  		}
  	} else {
  		last = !minstrel_ht_txstat_valid(mp, mi, &ar[0]);
-@@ -1330,10 +1328,11 @@ minstrel_ht_tx_status(void *priv, struct
+@@ -1305,14 +1322,18 @@ minstrel_ht_tx_status(void *priv, struct
+ 			last = (i == IEEE80211_TX_MAX_RATES - 1) ||
+ 				!minstrel_ht_txstat_valid(mp, mi, &ar[i + 1]);
+ 
+-			rate = minstrel_ht_get_stats(mp, mi, &ar[i]);
++			rate = minstrel_ht_get_stats(mp, mi, &ar[i], &rate_list[i]);
++
+ 			if (last)
  				rate->success += info->status.ampdu_ack_len;
  
  			rate->attempts += ar[i].count * info->status.ampdu_len;
@@ -59,32 +211,44 @@
  		}
  	}
  
--	minstrel_ht_report_tx_status(mp, mi, info, rate_list, i);
 +	orca_report_tx_status(mp, mi, info, rate_list, txpwr_list, i);
- 
++
  	if (mp->hw->max_rates > 1) {
  		/*
-@@ -1529,49 +1528,57 @@ minstrel_ht_get_max_amsdu_len(struct min
+ 		 * check for sudden death of spatial multiplexing,
+@@ -1334,7 +1355,9 @@ minstrel_ht_tx_status(void *priv, struct
+ 	}
+ 
+ 	if (update)
+-		minstrel_ht_update_rates(mp, mi);
++		minstrel_ht_update_rates(mp, mi, false);
++
++	spin_unlock_bh(&mi->lock);
+ }
+ 
+ static void
+@@ -1397,7 +1420,7 @@ minstrel_calc_retransmit(struct minstrel
+ }
+ 
+ 
+-static void
++void
+ minstrel_ht_set_rate(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
+                      struct ieee80211_sta_rates *ratetbl, int offset, int index)
+ {
+@@ -1505,39 +1528,57 @@ minstrel_ht_get_max_amsdu_len(struct min
  	return 0;
  }
  
 -static void
+-minstrel_ht_update_rates(struct minstrel_priv *mp, struct minstrel_ht_sta *mi)
 +void
- minstrel_ht_update_rates(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
- 			 bool force)
++minstrel_ht_update_rates(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
++			 bool force)
  {
  	struct ieee80211_sta_rates *rates;
  	int i = 0;
  	int max_rates = min_t(int, mp->hw->max_rates, IEEE80211_TX_RATE_TABLE_SIZE);
--
--	if (minstrel_ht_manual_mode(mp) && !force) {
--		if (mi->ratetbl) {
--			rates = kmemdup(mi->ratetbl, sizeof(*rates), GFP_ATOMIC);
--			if (rates)
--				rate_control_set_rates(mp->hw, mi->sta, rates);
--		}
--		return;
--	}
 +	bool manual_rc, manual_tpc, update_stats = true;
  
  	rates = kzalloc(sizeof(*rates), GFP_ATOMIC);
@@ -101,15 +265,15 @@
 -		minstrel_ht_set_rate(mp, mi, rates, i, mi->max_tp_rate[i]);
 -		rates->rate[i].txpower_idx = -1;
 -	}
-+	manual_rc = orca_sta_rc_manual_mode(mi) && !force;
-+	manual_tpc = orca_sta_tpc_manual_mode(mi) && !force;
- 
+-
 -	if (i < max_rates) {
 -		minstrel_ht_set_rate(mp, mi, rates, i, mi->max_prob_rate);
 -		rates->rate[i].txpower_idx = -1;
 -		i++;
 -	}
--
++	manual_rc = orca_sta_rc_manual_mode(mi) && !force;
++	manual_tpc = orca_sta_tpc_manual_mode(mi) && !force;
+ 
 -	if (i < IEEE80211_TX_RATE_TABLE_SIZE)
 -		rates->rate[i].idx = -1;
 +	if (manual_rc) {
@@ -152,66 +316,190 @@
  	rate_control_set_rates(mp->hw, mi->sta, rates);
  }
  
-@@ -1580,7 +1587,7 @@ minstrel_ht_get_sample_rate(struct minst
+@@ -1546,7 +1587,7 @@ minstrel_ht_get_sample_rate(struct minst
  {
  	u8 seq;
  
--	if (mp->hw->max_rates > 1 && !minstrel_ht_manual_mode(mp)) {
+-	if (mp->hw->max_rates > 1) {
 +	if (mp->hw->max_rates > 1 && !orca_sta_rc_manual_mode(mi)) {
  		seq = mi->sample_seq;
  		mi->sample_seq = (seq + 1) % ARRAY_SIZE(minstrel_sample_seq);
  		seq = minstrel_sample_seq[seq];
-@@ -1619,7 +1626,11 @@ minstrel_ht_get_rate(void *priv, struct
+@@ -1567,6 +1608,8 @@ minstrel_ht_get_rate(void *priv, struct
+ 	struct minstrel_ht_sta *mi = priv_sta;
+ 	struct minstrel_priv *mp = priv;
+ 	u16 sample_idx;
++	u32 sampling_interval = MINSTREL_SAMPLE_INTERVAL;
++	u8 sample_count = 1;
+ 	s16 sample_txpower = -1;
+ 
+ 	info->flags |= mi->tx_flags;
+@@ -1574,6 +1617,8 @@ minstrel_ht_get_rate(void *priv, struct
+ #ifdef CPTCFG_MAC80211_DEBUGFS
+ 	if (mp->fixed_rate_idx != -1)
+ 		return;
++
++	sampling_interval = mp->sampling_interval;
+ #endif
+ 
+ 	/* Don't use EAPOL frames for sampling on non-mrr hw */
+@@ -1581,14 +1626,34 @@ minstrel_ht_get_rate(void *priv, struct
  	    (info->control.flags & IEEE80211_TX_CTRL_PORT_CTRL_PROTO))
  		return;
  
--	if (minstrel_ht_manual_mode(mp) && mi->user_sample_rate != -1) {
 +	if (orca_sta_tpc_manual_mode(mi) && mi->user_sample_txpower != -1) {
 +		sample_txpower = mi->user_sample_txpower;
 +		mi->user_sample_txpower = -1;
 +	}
 +	if (orca_sta_rc_manual_mode(mi) && mi->user_sample_rate != -1) {
- 		sample_idx = mi->user_sample_rate;
- 		if (mi->user_sample_count > 0 &&
- 		    mi->user_sample_count <= IEEE80211_MAX_TX_RETRY)
-@@ -1857,7 +1868,7 @@ minstrel_ht_update_caps(void *priv, stru
++		sample_idx = mi->user_sample_rate;
++		if (mi->user_sample_count > 0 &&
++		    mi->user_sample_count <= IEEE80211_MAX_TX_RETRY)
++			sample_count = mi->user_sample_count;
++
++		mi->user_sample_rate = -1;
++		mi->user_sample_count = 0;
++
++		goto set_rate;
++	}
++
+ 	if (time_is_after_jiffies(mi->sample_time))
+ 		return;
+ 
+-	mi->sample_time = jiffies + MINSTREL_SAMPLE_INTERVAL;
++	spin_lock_bh(&mi->lock);
++
++	mi->sample_time = jiffies + sampling_interval;
+ 	sample_idx = minstrel_ht_get_sample_rate(mp, mi);
++	spin_unlock_bh(&mi->lock);
+ 	if (!sample_idx)
+ 		return;
+ 
++set_rate:
+ 	sample_group = &minstrel_mcs_groups[MI_RATE_GROUP(sample_idx)];
+ 	sample_idx = MI_RATE_IDX(sample_idx);
+ 
+@@ -1597,7 +1662,7 @@ minstrel_ht_get_rate(void *priv, struct
+ 		return;
+ 
+ 	info->flags |= IEEE80211_TX_CTL_RATE_CTRL_PROBE;
+-	rate->count = 1;
++	rate->count = min_t(u8, sample_count, mp->max_retry);
+ 
+ 	if (sample_group == &minstrel_mcs_groups[MINSTREL_CCK_GROUP]) {
+ 		int idx = sample_idx % ARRAY_SIZE(mp->cck_rates);
+@@ -1688,7 +1753,7 @@ minstrel_ht_update_caps(void *priv, stru
+ 	else
+ 		use_vht = 0;
+ 
+-	memset(mi, 0, sizeof(*mi));
++	spin_lock_bh(&mi->lock);
+ 
+ 	mi->sta = sta;
+ 	mi->band = sband->band;
+@@ -1801,7 +1866,11 @@ minstrel_ht_update_caps(void *priv, stru
+ 
+ 	/* create an initial rate table with the lowest supported rates */
  	minstrel_ht_update_stats(mp, mi);
- 	minstrel_ht_update_rates(mp, mi, true);
- 
--	minstrel_ht_sta_update(mp, mi);
+-	minstrel_ht_update_rates(mp, mi);
++	minstrel_ht_update_rates(mp, mi, true);
++
 +	orca_sta_update(mp, mi);
- 
- 	spin_unlock_bh(&mi->lock);
++
++	spin_unlock_bh(&mi->lock);
  }
-@@ -1897,10 +1908,13 @@ minstrel_ht_alloc_sta(void *priv, struct
  
- 	mi = kzalloc(sizeof(*mi), gfp);
- 	spin_lock_init(&mi->lock);
--#ifdef CPTCFG_MAC80211_RC_MINSTREL_DEBUGFS_API
+ static void
+@@ -1837,12 +1906,24 @@ minstrel_ht_alloc_sta(void *priv, struct
+ 			max_rates = sband->n_bitrates;
+ 	}
+ 
+-	return kzalloc(sizeof(*mi), gfp);
++	mi = kzalloc(sizeof(*mi), gfp);
++	spin_lock_init(&mi->lock);
 +
 +#ifdef CPTCFG_MAC80211_ORCA_UAPI
- 	INIT_LIST_HEAD(&mi->list);
++	INIT_LIST_HEAD(&mi->list);
 +	mi->ratetbl = kzalloc(sizeof(*mi->ratetbl), gfp);
- 	mi->user_sample_rate = -1;
- 	mi->user_sample_count = 0;
++	mi->user_sample_rate = -1;
++	mi->user_sample_count = 0;
 +	mi->user_sample_txpower = -1;
- #endif
++#endif
++
++	return mi;
+ }
  
- 	return mi;
-@@ -1909,7 +1923,7 @@ minstrel_ht_alloc_sta(void *priv, struct
  static void
  minstrel_ht_free_sta(void *priv, struct ieee80211_sta *sta, void *priv_sta)
  {
--	minstrel_ht_sta_remove(priv, priv_sta);
 +	orca_sta_remove(priv, priv_sta);
  	kfree(priv_sta);
  }
  
-@@ -2066,14 +2080,14 @@ static void minstrel_ht_add_debugfs(stru
- 				   &mp->sampling_interval,
- 				   &minstrel_ht_debugfs_hz_fops);
+@@ -1936,6 +2017,9 @@ minstrel_ht_alloc(struct ieee80211_hw *h
  
--	minstrel_ht_add_debugfs_api(hw, priv, debugfsdir);
+ 	mp->hw = hw;
+ 	mp->update_interval = HZ / 20;
++#ifdef CPTCFG_MAC80211_DEBUGFS
++	mp->sampling_interval = MINSTREL_SAMPLE_INTERVAL;
++#endif
+ 
+ 	minstrel_ht_init_cck_rates(mp);
+ 	for (i = 0; i < ARRAY_SIZE(mp->hw->wiphy->bands); i++)
+@@ -1945,6 +2029,41 @@ minstrel_ht_alloc(struct ieee80211_hw *h
+ }
+ 
+ #ifdef CPTCFG_MAC80211_DEBUGFS
++
++static int minstrel_ht_debugfs_hz_get(void *data, u64 *val)
++{
++	unsigned int tmp = *(unsigned int *)data;
++	if (tmp)
++		*val = HZ / *(unsigned int *)data;
++	else
++		*val = 0;
++	return 0;
++}
++
++static int minstrel_ht_debugfs_hz_set(void *data, u64 val)
++{
++	if (!val || val > HZ)
++		return -EINVAL;
++
++	*(unsigned int *)data = val ? (HZ / (u32)val) : val;
++	return 0;
++}
++
++static int minstrel_ht_debugfs_hz_open(struct inode *inode, struct file *file)
++{
++	return simple_attr_open(inode, file, minstrel_ht_debugfs_hz_get,
++				minstrel_ht_debugfs_hz_set, "%llu\n");
++}
++
++static const struct file_operations minstrel_ht_debugfs_hz_fops = {
++	.owner = THIS_MODULE,
++	.open = minstrel_ht_debugfs_hz_open,
++	.release = simple_attr_release,
++	.read = debugfs_attr_read,
++	.write = debugfs_attr_write,
++	.llseek = no_llseek,
++};
++
+ static void minstrel_ht_add_debugfs(struct ieee80211_hw *hw, void *priv,
+ 				    struct dentry *debugfsdir)
+ {
+@@ -1953,12 +2072,22 @@ static void minstrel_ht_add_debugfs(stru
+ 	mp->fixed_rate_idx = (u32) -1;
+ 	debugfs_create_u32("fixed_rate_idx", S_IRUGO | S_IWUGO, debugfsdir,
+ 			   &mp->fixed_rate_idx);
++
++	debugfs_create_file_unsafe("update_freq", 0666, debugfsdir,
++	                  	   &mp->update_interval,
++				   &minstrel_ht_debugfs_hz_fops);
++	debugfs_create_file_unsafe("sampling_freq", 0666, debugfsdir,
++				   &mp->sampling_interval,
++				   &minstrel_ht_debugfs_hz_fops);
++
 +	orca_add_debugfs_api(hw, priv, debugfsdir);
  }
  #endif
@@ -219,84 +507,65 @@
  static void
  minstrel_ht_free(void *priv)
  {
--	minstrel_ht_remove_debugfs_api(priv);
 +	orca_remove_debugfs_api(priv);
  	kfree(priv);
  }
  
 --- a/net/mac80211/rc80211_minstrel_ht.h
 +++ b/net/mac80211/rc80211_minstrel_ht.h
-@@ -72,10 +72,10 @@
+@@ -72,6 +72,11 @@
  #define MINSTREL_SAMPLE_RATES		5 /* rates per sample type */
  #define MINSTREL_SAMPLE_INTERVAL	(HZ / 50)
  
--#define MINSTREL_MONITOR_STA		BIT(0)
--#define MINSTREL_MONITOR_TXS		BIT(1)
--#define MINSTREL_MONITOR_RXS		BIT(2)
--#define MINSTREL_MONITOR_STATS		BIT(3)
 +#define ORCA_MONITOR_TXS		BIT(0)
 +#define ORCA_MONITOR_RXS		BIT(1)
 +#define ORCA_MONITOR_STATS		BIT(2)
 +#define ORCA_ECHO_TPRC			BIT(7)
- 
++
  struct minstrel_priv {
  	struct ieee80211_hw *hw;
-@@ -99,7 +99,7 @@ struct minstrel_priv {
+ 	bool has_mrr;
+@@ -92,6 +97,16 @@ struct minstrel_priv {
+ 	 *   - setting will be applied on next update
+ 	 */
  	u32 fixed_rate_idx;
- 	unsigned int sampling_interval;
- #endif
--#ifdef CPTCFG_MAC80211_RC_MINSTREL_DEBUGFS_API
++	unsigned int sampling_interval;
++#endif
 +#ifdef CPTCFG_MAC80211_ORCA_UAPI
- 	struct rchan *relay_ev;
- 	spinlock_t relay_lock;
- 
-@@ -107,7 +107,6 @@ struct minstrel_priv {
- 	spinlock_t sta_wlock;
- 
- 	u8 monitor;
--	bool manual;
++	struct rchan *relay_ev;
++	spinlock_t relay_lock;
++
++	struct list_head stations;
++	spinlock_t sta_wlock;
++
++	u8 monitor;
  #endif
  };
  
-@@ -169,11 +168,15 @@ struct minstrel_sample_category {
+@@ -153,7 +168,18 @@ struct minstrel_sample_category {
  };
  
  struct minstrel_ht_sta {
--#ifdef CPTCFG_MAC80211_RC_MINSTREL_DEBUGFS_API
 +#ifdef CPTCFG_MAC80211_ORCA_UAPI
- 	struct list_head list;
- 	u32 user_sample_rate;
++	struct list_head list;
++	u32 user_sample_rate;
 +	s16 user_sample_txpower;
- 	u8 user_sample_count;
- 	struct ieee80211_sta_rates *ratetbl;
++	u8 user_sample_count;
++	struct ieee80211_sta_rates *ratetbl;
 +
 +	bool rc_manual;
 +	bool tpc_manual;
- #endif
++#endif
  	struct ieee80211_sta *sta;
- 	spinlock_t lock;
-@@ -221,113 +224,121 @@ struct minstrel_ht_sta {
++	spinlock_t lock;
+ 
+ 	/* ampdu length (average, per sampling interval) */
+ 	unsigned int ampdu_len;
+@@ -197,7 +223,134 @@ struct minstrel_ht_sta {
+ };
  
  void minstrel_ht_add_sta_debugfs(void *priv, void *priv_sta, struct dentry *dir);
- 
--#ifdef CPTCFG_MAC80211_RC_MINSTREL_DEBUGFS_API
--void minstrel_ht_sta_update(struct minstrel_priv *mp, struct minstrel_ht_sta *mi);
--void minstrel_ht_sta_remove(struct minstrel_priv *mp, struct minstrel_ht_sta *mi);
--void __minstrel_ht_report_tx_status(struct minstrel_priv *mp,
--				    struct minstrel_ht_sta *mi,
--				    struct ieee80211_tx_info *info,
--				    u16 *rate_list, int n_rates);
--void __minstrel_ht_report_rx_status(struct minstrel_priv *mp, u8 *addr,
--                                    int last_signal, u8 chain_status,
--                                    s8 *chain_signal);
--void __minstrel_ht_report_rate_update(struct minstrel_priv *mp,
--				      struct minstrel_ht_sta *mi, u16 rate,
--				      struct minstrel_rate_stats *mrs);
--void __minstrel_ht_report_best_rates(struct minstrel_priv *mp,
--				     struct minstrel_ht_sta *mi);
--void __minstrel_ht_report_sample_rates(struct minstrel_priv *mp,
--				       struct minstrel_ht_sta *mi);
--void minstrel_ht_add_debugfs_api(struct ieee80211_hw *hw, void *priv,
++
 +#ifdef CPTCFG_MAC80211_ORCA_UAPI
 +void orca_sta_update(struct minstrel_priv *mp, struct minstrel_ht_sta *mi);
 +void orca_sta_remove(struct minstrel_priv *mp, struct minstrel_ht_sta *mi);
@@ -314,117 +583,85 @@
 +void __orca_report_sample_rates(struct minstrel_priv *mp,
 +				struct minstrel_ht_sta *mi);
 +void orca_add_debugfs_api(struct ieee80211_hw *hw, void *priv,
- 				 struct dentry *dir);
--void minstrel_ht_remove_debugfs_api(void *priv);
++				 struct dentry *dir);
 +void orca_remove_debugfs_api(void *priv);
- #else
- static inline void
--minstrel_ht_sta_update(struct minstrel_priv *mp, struct minstrel_ht_sta *mi)
++#else
++static inline void
 +orca_sta_update(struct minstrel_priv *mp, struct minstrel_ht_sta *mi)
- {
- }
- static inline void
--minstrel_ht_sta_remove(struct minstrel_priv *mp, struct minstrel_ht_sta *mi)
++{
++}
++static inline void
 +orca_sta_remove(struct minstrel_priv *mp, struct minstrel_ht_sta *mi)
- {
- }
- static inline void
--minstrel_ht_add_debugfs_api(struct ieee80211_hw *hw, void *priv,
++{
++}
++static inline void
 +orca_add_debugfs_api(struct ieee80211_hw *hw, void *priv,
- 			    struct dentry *dir)
- {
- }
- static inline void
--minstrel_ht_remove_debugfs_api(void *priv)
++			    struct dentry *dir)
++{
++}
++static inline void
 +orca_remove_debugfs_api(void *priv)
- {
- }
- #endif
- 
- static inline void
--minstrel_ht_report_tx_status(struct minstrel_priv *mp,
--			     struct minstrel_ht_sta *mi,
--			     struct ieee80211_tx_info *info,
--			     u16 *rate_list, int n_rates)
++{
++}
++#endif
++
++static inline void
 +orca_report_tx_status(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
 +		      struct ieee80211_tx_info *info,
 +		      u16 *rate_list, s16 *txpwr_list, int n_rates)
- {
--#ifdef CPTCFG_MAC80211_RC_MINSTREL_DEBUGFS_API
--	if (!(mp->monitor & MINSTREL_MONITOR_TXS))
++{
 +#ifdef CPTCFG_MAC80211_ORCA_UAPI
 +	if (!(mp->monitor & ORCA_MONITOR_TXS))
- 		return;
- 
--	__minstrel_ht_report_tx_status(mp, mi, info, rate_list, n_rates);
++		return;
++
 +	__orca_report_tx_status(mp, mi, info, rate_list, txpwr_list,
 +				       n_rates);
- #endif
- }
- 
- static inline void
--minstrel_ht_report_rx_status(struct minstrel_priv *mp, u8 *addr,
--                             int last_signal, u8 chain_status, s8 *chain_signal)
++#endif
++}
++
++static inline void
 +orca_report_rx_status(struct minstrel_priv *mp, u8 *addr, s8 last_signal,
 +		      u8 chain_status, s8 *chain_signal)
- {
--#ifdef CPTCFG_MAC80211_RC_MINSTREL_DEBUGFS_API
--	if (!(mp->monitor & MINSTREL_MONITOR_RXS))
++{
 +#ifdef CPTCFG_MAC80211_ORCA_UAPI
 +	if (!(mp->monitor & ORCA_MONITOR_RXS))
- 		return;
- 
--	__minstrel_ht_report_rx_status(mp, addr, last_signal,
--	                               chain_status, chain_signal);
++		return;
++
 +	__orca_report_rx_status(mp, addr, last_signal, chain_status, chain_signal);
- #endif
- }
- 
- static inline void
--minstrel_ht_report_rate_update(struct minstrel_priv *mp,
--			       struct minstrel_ht_sta *mi, u16 rate,
--			       struct minstrel_rate_stats *mrs)
++#endif
++}
++
++static inline void
 +orca_report_rate_update(struct minstrel_priv *mp,
 +			struct minstrel_ht_sta *mi, u16 rate,
 +			struct minstrel_rate_stats *mrs)
- {
--#ifdef CPTCFG_MAC80211_RC_MINSTREL_DEBUGFS_API
--	if (!(mp->monitor & MINSTREL_MONITOR_STATS))
++{
 +#ifdef CPTCFG_MAC80211_ORCA_UAPI
 +	if (!(mp->monitor & ORCA_MONITOR_STATS))
- 		return;
- 
--	__minstrel_ht_report_rate_update(mp, mi, rate, mrs);
++		return;
++
 +	__orca_report_rate_update(mp, mi, rate, mrs);
- #endif
- }
- 
- static inline void
--minstrel_ht_report_best_rates(struct minstrel_priv *mp, struct minstrel_ht_sta *mi)
++#endif
++}
++
++static inline void
 +orca_report_best_rates(struct minstrel_priv *mp, struct minstrel_ht_sta *mi)
- {
--#ifdef CPTCFG_MAC80211_RC_MINSTREL_DEBUGFS_API
--	if (!(mp->monitor & MINSTREL_MONITOR_STATS))
++{
 +#ifdef CPTCFG_MAC80211_ORCA_UAPI
 +	if (!(mp->monitor & ORCA_MONITOR_STATS))
- 		return;
- 
--	__minstrel_ht_report_best_rates(mp, mi);
++		return;
++
 +	__orca_report_best_rates(mp, mi);
- #endif
- }
- 
- static inline void
--minstrel_ht_report_sample_rates(struct minstrel_priv *mp, struct minstrel_ht_sta *mi)
++#endif
++}
++
++static inline void
 +orca_report_sample_rates(struct minstrel_priv *mp, struct minstrel_ht_sta *mi)
- {
--#ifdef CPTCFG_MAC80211_RC_MINSTREL_DEBUGFS_API
--	if (!(mp->monitor & MINSTREL_MONITOR_STATS))
++{
 +#ifdef CPTCFG_MAC80211_ORCA_UAPI
 +	if (!(mp->monitor & ORCA_MONITOR_STATS))
- 		return;
- 
--	__minstrel_ht_report_sample_rates(mp, mi);
++		return;
++
 +	__orca_report_sample_rates(mp, mi);
 +#endif
 +}
@@ -436,90 +673,32 @@
 +	return mi->rc_manual;
 +#else
 +	return false;
- #endif
- }
- 
- static inline bool
--minstrel_ht_manual_mode(struct minstrel_priv *mp)
++#endif
++}
++
++static inline bool
 +orca_sta_tpc_manual_mode(struct minstrel_ht_sta *mi)
- {
--#ifdef CPTCFG_MAC80211_RC_MINSTREL_DEBUGFS_API
--	return mp->manual;
++{
 +#ifdef CPTCFG_MAC80211_ORCA_UAPI
 +	return mi->tpc_manual;
- #else
- 	return false;
- #endif
-@@ -338,6 +349,8 @@ void minstrel_ht_set_rate(struct minstre
- 						  int index);
++#else
++	return false;
++#endif
++}
++
++void minstrel_ht_set_rate(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
++						  struct ieee80211_sta_rates *ratetbl, int offset,
++						  int index);
  int minstrel_ht_get_tp_avg(struct minstrel_ht_sta *mi, int group, int rate,
  			   int prob_avg);
 +void minstrel_ht_update_rates(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
 +			      bool force);
- void minstrel_ht_update_stats(struct minstrel_priv *mp, struct minstrel_ht_sta *mi);
++void minstrel_ht_update_stats(struct minstrel_priv *mp, struct minstrel_ht_sta *mi);
  
  #endif
---- a/local-symbols
-+++ b/local-symbols
-@@ -41,7 +41,7 @@ LIB80211_DEBUG=
- MAC80211=
- MAC80211_HAS_RC=
- MAC80211_RC_MINSTREL=
--MAC80211_RC_MINSTREL_DEBUGFS_API=
-+MAC80211_ORCA_UAPI=
- MAC80211_RC_DEFAULT_MINSTREL=
- MAC80211_RC_DEFAULT=
- MAC80211_MESH=
---- a/net/mac80211/Kconfig
-+++ b/net/mac80211/Kconfig
-@@ -29,15 +29,6 @@ config MAC80211_RC_MINSTREL
- 	help
- 	  This option enables the 'minstrel' TX rate control algorithm
- 
--config MAC80211_RC_MINSTREL_DEBUGFS_API
--	bool "Minstrel debugfs userspace control API"
--	depends on MAC80211_RC_MINSTREL
--	depends on MAC80211_DEBUGFS
--	select RELAY
--	help
--	  This option creates debugfs files that allow user space to observe
--	  and/or control minstrel rate selection behavior
--
- choice
- 	prompt "Default rate control algorithm"
- 	depends on MAC80211_HAS_RC
-@@ -107,6 +98,15 @@ config MAC80211_MESSAGE_TRACING
- 	  need to be present in the binary and formatted at
- 	  runtime for tracing.
- 
-+config MAC80211_ORCA_UAPI
-+        bool "ORCA Userspace API"
-+        depends on MAC80211_RC_MINSTREL
-+        depends on MAC80211_DEBUGFS
-+        select RELAY
-+        help
-+          This option creates debugfs files that allow user space to observe
-+          and/or control minstrel rate selection behavior
-+
- menuconfig MAC80211_DEBUG_MENU
- 	bool "Select mac80211 debugging features"
- 	depends on MAC80211
---- a/net/mac80211/Makefile
-+++ b/net/mac80211/Makefile
-@@ -63,8 +63,8 @@ rc80211_minstrel-y := \
- rc80211_minstrel-$(CPTCFG_MAC80211_DEBUGFS) += \
- 	rc80211_minstrel_ht_debugfs.o
- 
--rc80211_minstrel-$(CPTCFG_MAC80211_RC_MINSTREL_DEBUGFS_API) += \
--	rc80211_minstrel_ht_api.o
-+rc80211_minstrel-$(CPTCFG_MAC80211_ORCA_UAPI) += \
-+	orca_uapi.o
- 
- mac80211-$(CPTCFG_MAC80211_RC_MINSTREL) += $(rc80211_minstrel-y)
- 
 --- /dev/null
 +++ b/net/mac80211/orca_uapi.c
-@@ -0,0 +1,1071 @@
+@@ -0,0 +1,1217 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * ORCA - Open-Source Resource Control API
@@ -543,6 +722,7 @@
 +	PHY_CMD_START,
 +	PHY_CMD_STOP,
 +	PHY_CMD_DUMP,
++	PHY_CMD_SET_FEATURE,
 +
 +	/* per-STA commands */
 +	STA_CMD_RC_MODE,
@@ -655,6 +835,8 @@
 +	seq_printf(s, "#reset_stats;macaddr\n");
 +	seq_printf(s, "#reset_stats;all\n");
 +
++	seq_printf(s, "#set_feature;feature;on-or-off\n");
++
 +	for (i = 0; i < MINSTREL_GROUPS_NB; i++) {
 +		const struct mcs_group *g = &minstrel_mcs_groups[i];
 +		const char *type;
@@ -695,6 +877,12 @@
 +	struct wiphy *wiphy = container_of(s->private, struct wiphy, dev);
 +	struct ieee80211_local *local = wiphy_priv(wiphy);
 +	struct ieee80211_sub_if_data *sdata;
++	struct sta_info *sta_info;
++	struct minstrel_priv *mp = local->rate_ctrl->priv;
++	struct minstrel_ht_sta *mi;
++	char tmp_on[64] = {};
++	char tmp_off[64] = {};
++	int len, ofs_on = 0, ofs_off = 0;
 +	int i = 0;
 +
 +	seq_printf(s, "drv;%s\n", wiphy_dev(wiphy)->driver->name);
@@ -729,6 +917,71 @@
 +	seq_printf(s, "\n");
 +
 +skip_tpc:
++	/* Current monitor modes states */
++	if (mp->monitor & ORCA_MONITOR_TXS)
++		ofs_on += sprintf(tmp_on, "txs,");
++	if (mp->monitor & ORCA_MONITOR_RXS)
++		ofs_on += sprintf(tmp_on + ofs_on, "rxs,");
++	if (mp->monitor & ORCA_MONITOR_STATS)
++		ofs_on += sprintf(tmp_on + ofs_on, "stats,");
++	if (mp->monitor & ORCA_ECHO_TPRC)
++		ofs_on += sprintf(tmp_on + ofs_on, "tprc_echo,");
++
++	len = strlen(tmp_on);
++	if (len)
++		tmp_on[len - 1] = 0;
++
++	seq_printf(s, "mon;%s\n", tmp_on);
++
++	/* Controllable feature information */
++	if (!local->ops->get_feature_state)
++		goto skip_ftrs;
++
++	tmp_on[0] = 0;
++	ofs_on = 0;
++	if (mp->hw->feature_ctrl & IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY) {
++		if (local->ops->get_feature_state(mp->hw, IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY))
++			ofs_on += sprintf(tmp_on, "adaptive_sens,");
++		else
++			ofs_off += sprintf(tmp_off, "adaptive_sens,");
++	}
++	if (mp->hw->feature_ctrl & IEEE80211_FTRCTRL_TPC) {
++		if (local->ops->get_feature_state(mp->hw, IEEE80211_FTRCTRL_TPC))
++			ofs_on += sprintf(tmp_on + ofs_on, "tpc,");
++		else
++			ofs_off += sprintf(tmp_off + ofs_off, "tpc,");
++	}
++
++	len = strlen(tmp_on);
++	if (len)
++		tmp_on[len - 1] = 0;
++
++	len = strlen(tmp_off);
++	if (len)
++		tmp_off[len - 1] = 0;
++
++	seq_printf(s, "ftrs;on;%s\n", tmp_on);
++	seq_printf(s, "ftrs;off;%s\n", tmp_off);
++
++skip_ftrs:
++	/* keep this block last! */
++	rcu_read_lock();
++	list_for_each_entry_rcu(mi, &mp->stations, list) {
++		sta_info = container_of(mi->sta, struct sta_info, sta);
++		seq_printf(s, "sta;%pM;%s;%s;%s;%x;%x;",
++			   mi->sta->addr, sta_info->sdata->name,
++			   mi->rc_manual ? "manual" : "auto",
++			   mi->tpc_manual ? "manual" : "auto",
++			   mi->overhead, mi->overhead_legacy);
++
++		seq_printf(s, "%x", mi->supported[0]);
++		for (i = 1; i < MINSTREL_GROUPS_NB; i++)
++			seq_printf(s, ";%x", mi->supported[i]);
++
++		seq_printf(s, "\n");
++	}
++	rcu_read_unlock();
++
 +	return 0;
 +}
 +
@@ -905,6 +1158,69 @@
 +	mi->user_sample_txpower = -1;
 +}
 +
++/**
++ * orca_is_phy_tpc_ready - check if TPC can be used for a PHY
++ *
++ * TPC is ready if hardware/driver supports it and it is enabled in
++ * the driver.
++ */
++static inline bool
++orca_is_phy_tpc_ready(struct ieee80211_hw *hw)
++{
++	struct ieee80211_local *local = hw_to_local(hw);
++
++	return (ieee80211_hw_check(hw, SUPPORTS_TPC_PER_PACKET) ||
++		ieee80211_hw_check(hw, SUPPORTS_TPC_PER_MRR)) &&
++		/*
++		 * this returns 1 for active, 0 for inactive and -1 for unsupported.
++		 * because hw_flag is set, assume it is always active in driver.
++		 */
++	       local->ops->get_feature_state(hw, IEEE80211_FTRCTRL_TPC);
++}
++
++static int
++orca_phy_set_feature(struct minstrel_priv *mp, char *args)
++{
++	struct ieee80211_local *local = hw_to_local(mp->hw);
++	enum ieee80211_feature_ctrl feature;
++	char *feature_str, *arg;
++	int res;
++	bool enable;
++
++	/* We need at least the feature name and one argument */
++	feature_str = strsep(&args, ";");
++	arg = strsep(&args, ";");
++	if (!feature_str || !arg)
++		return -EINVAL;
++
++	if (!strcmp(arg, "on"))
++		enable = true;
++	else if (!strcmp(arg, "off"))
++		enable = false;
++	else
++		return -EPERM;
++
++	if (!local->ops->set_feature_state)
++		return -EPERM;
++
++	if (!strcmp(feature_str, "adaptive_sens"))
++		feature = IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY;
++	else if (!strcmp(feature_str, "tpc"))
++		feature = IEEE80211_FTRCTRL_TPC;
++	else
++		return -ENOENT;
++
++	/* Check if the hardware/driver supports the given feature ctrl */
++	if (!(mp->hw->feature_ctrl & feature))
++		return -EPERM;
++
++	res = local->ops->set_feature_state(mp->hw, feature, enable);
++	if (!res)
++		return -EIO; /* TODO: more suitable error? */
++
++	return 0;
++}
++
 +static int
 +orca_sta_set_rc_mode(struct minstrel_ht_sta *mi, char *mode)
 +{
@@ -932,9 +1248,13 @@
 +}
 +
 +static int
-+orca_sta_set_tpc_mode(struct minstrel_ht_sta *mi, char *mode)
++orca_sta_set_tpc_mode(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
++		      char *mode)
 +{
 +	int i;
++
++	if (!orca_is_phy_tpc_ready(mp->hw))
++		return -EPERM;
 +
 +	if (!mode)
 +		return -EINVAL;
@@ -1128,7 +1448,7 @@
 +	tpc = (cmd == STA_CMD_TPC || cmd == STA_CMD_TPRC);
 +
 +	if ((rc && !orca_sta_rc_manual_mode(mi)) ||
-+	    (tpc && !orca_sta_tpc_manual_mode(mi)))
++	    (tpc && (!orca_is_phy_tpc_ready(mp->hw) || !orca_sta_tpc_manual_mode(mi))))
 +		return -EPERM;
 +
 +	if (tpc)
@@ -1215,7 +1535,7 @@
 +		ret = orca_sta_set_rc_mode(mi, args[1]);
 +		break;
 +	case STA_CMD_TPC_MODE:
-+		ret = orca_sta_set_tpc_mode(mi, args[1]);
++		ret = orca_sta_set_tpc_mode(mp, mi, args[1]);
 +		break;
 +	case STA_CMD_RESET_STATS:
 +		orca_sta_reset_rc_stats(mp, mi);
@@ -1248,7 +1568,7 @@
 +		break;
 +	case STA_CMD_TPC_MODE:
 +		list_for_each_entry_rcu(mi, &mp->stations, list)
-+			orca_sta_set_tpc_mode(mi, args);
++			orca_sta_set_tpc_mode(mp, mi, args);
 +		break;
 +	default:
 +		ret = -EPERM;
@@ -1287,6 +1607,9 @@
 +	case STA_CMD_TPRC:
 +	case STA_CMD_PROBE:
 +		err = orca_sta_cmd(mp, cmd, args);
++		break;
++	case PHY_CMD_SET_FEATURE:
++		err = orca_phy_set_feature(mp, args);
 +		break;
 +	default:
 +		err = -EINVAL;
@@ -1377,6 +1700,8 @@
 +		cmd = STA_CMD_TPC_MODE;
 +	} else if (!strcmp(cur, "reset_stats")) {
 +		cmd = STA_CMD_RESET_STATS;
++	} else if (!strcmp(cur, "set_feature")) {
++		cmd = PHY_CMD_SET_FEATURE;
 +	} else {
 +		return -EINVAL;
 +	}
@@ -1591,857 +1916,3 @@
 +
 +	spin_unlock_bh(&mp->relay_lock);
 +}
---- a/net/mac80211/rc80211_minstrel_ht_api.c
-+++ /dev/null
-@@ -1,840 +0,0 @@
--// SPDX-License-Identifier: GPL-2.0-only
--/*
-- * ORCA - Open-Source Resource Control API
-- *
-- * Copyright (C) 2021 Felix Fietkau <nbd@nbd.name>
-- */
--#include <linux/kernel.h>
--#include <linux/debugfs.h>
--#include <linux/relay.h>
--#include <net/mac80211.h>
--#include "ieee80211_i.h"
--#include "rate.h"
--#include "rc80211_minstrel_ht.h"
--
--#define ORCA_VERSION "1"
--
--extern u8 sample_table[SAMPLE_COLUMNS][MCS_GROUP_RATES];
--
--enum sta_cmd {
--	STA_CMD_PROBE,
--	STA_CMD_RC,
--};
--
--static void
--minstrel_ht_print_rate_durations(struct seq_file *s, int group)
--{
--	const struct mcs_group *g = &minstrel_mcs_groups[group];
--	int n_rates;
--	int i;
--
--	if (g->flags & IEEE80211_TX_RC_VHT_MCS)
--		n_rates = 10;
--	else
--		n_rates = 8;
--
--	seq_printf(s, "%x", g->duration[0] << g->shift);
--	for (i = 1; i < n_rates; i++)
--		seq_printf(s, ";%x", g->duration[i] << g->shift);
--
--	for (; i < MCS_GROUP_RATES; i++)
--		seq_printf(s, ";");
--}
--
--static int
--minstrel_ht_read_api_info(struct seq_file *s, void *data)
--{
--	int i, j;
--	seq_printf(s, "orca_version;%s\n", ORCA_VERSION);
--
--	seq_printf(s, "#group;index;offset;type;nss;bw;gi");
--	for (i = 0; i < MCS_GROUP_RATES; i++)
--	        seq_printf(s, ";airtime%d", i);
--        seq_printf(s, "\n");
--
--	seq_printf(s, "#sta;action;macaddr;iface;overhead_mcs;overhead_legacy");
--	for (i = 0; i < MINSTREL_GROUPS_NB; i++)
--	        seq_printf(s, ";mcs%d", i);
--	seq_printf(s, "\n");
--
--	seq_printf(s, "#txs;macaddr;num_frames;num_acked;probe");
--	for (i = 0; i < IEEE80211_TX_MAX_RATES; i++)
--		seq_printf(s, ";rate%d;count%d", i, i);
--	seq_printf(s, "\n");
--
--	seq_printf(s, "#rxs;macaddr;last_signal");
--	for (i = 0; i < IEEE80211_MAX_CHAINS; i++)
--		seq_printf(s, ";signal%d", i);
--	seq_printf(s, "\n");
--
--	seq_printf(s, "#stats;macaddr;rate;avg_prob;avg_tp;cur_success;"
--		      "cur_attempts;hist_success;hist_attempts\n");
--	seq_printf(s, "#best_rates;macaddr");
--	for (i = 0; i < MAX_THR_RATES; i++)
--		seq_printf(s, ";maxtp%d", i);
--	seq_printf(s, ";maxprob\n");
--
--	seq_printf(s, "#sample_rates;macaddr");
--	for (i = 0; i < MINSTREL_SAMPLE_RATES; i++)
--	        seq_printf(s, ";inc%d", i);
--	for (i = 0; i < MINSTREL_SAMPLE_RATES; i++)
--	        seq_printf(s, ";jump%d", i);
--	for (i = 0; i < MINSTREL_SAMPLE_RATES; i++)
--	        seq_printf(s, ";slow%d", i);
--	seq_printf(s, "\n");
--
--	seq_printf(s, "#reset_stats;macaddr\n");
--
--	seq_printf(s, "#set_rates;macaddr");
--	for (i = 0; i < IEEE80211_TX_MAX_RATES; i++)
--		seq_printf(s, ";rate%d,count%d", i, i);
--	seq_printf(s, "\n");
--
--	seq_printf(s, "#set_probe;macaddr;rate,count\n");
--
--	seq_printf(s, "#sample_table;cols;rows");
--	for (i = 0; i < SAMPLE_COLUMNS; i++)
--		seq_printf(s, ";column%d", i);
--	seq_printf(s, "\n");
--
--	for (i = 0; i < MINSTREL_GROUPS_NB; i++) {
--		const struct mcs_group *g = &minstrel_mcs_groups[i];
--		const char *type;
--
--		if (i == MINSTREL_CCK_GROUP)
--			type = "cck";
--		else if (i == MINSTREL_OFDM_GROUP)
--			type = "ofdm";
--		else if (g->flags & IEEE80211_TX_RC_VHT_MCS)
--			type = "vht";
--		else
--			type = "ht";
--
--		seq_printf(s, "group;%x;%x;%s;%x;%x;%x;",
--			   i, (u32) MI_RATE(i, 0), type, g->streams, g->bw,
--			   !!(g->flags & IEEE80211_TX_RC_SHORT_GI));
--		minstrel_ht_print_rate_durations(s, i);
--		seq_printf(s, "\n");
--	}
--	seq_printf(s, "sample_table;%x;%x", SAMPLE_COLUMNS, MCS_GROUP_RATES);
--	for (i = 0; i < SAMPLE_COLUMNS; i++) {
--		seq_printf(s, ";");
--		for (j = 0; j < MCS_GROUP_RATES; j++) {
--			if (j == 0)
--				seq_printf(s, "%x", sample_table[i][j]);
--			else
--				seq_printf(s, ",%x", sample_table[i][j]);
--		}
--	}
--	seq_printf(s, "\n");
--
--	return 0;
--}
--
--static int
--minstrel_ht_read_phy_info(struct seq_file *s, void *data)
--{
--	struct wiphy *wiphy = container_of(s->private, struct wiphy, dev);
--	struct ieee80211_local *local = wiphy_priv(wiphy);
--	struct ieee80211_sub_if_data *sdata;
--	struct minstrel_priv *mp = local->rate_ctrl->priv;
--	int i = 0;
--
--	seq_printf(s, "drv;%s\n", wiphy_dev(wiphy)->driver->name);
--
--	mutex_lock(&local->iflist_mtx);
--	list_for_each_entry(sdata, &local->interfaces, list) {
--		if (!i) {
--			seq_printf(s, "if;%s", sdata->name);
--			i++;
--        	} else {
--			seq_printf(s, ",%s", sdata->name);
--		}
--	}
--	mutex_unlock(&local->iflist_mtx);
--
--	seq_printf(s, "\nrc_mode;%s\n", mp->manual ? "manual" : "auto");
--
--	return 0;
--}
--
--static struct dentry *
--create_buf_file_cb(const char *filename, struct dentry *parent, umode_t mode,
--		   struct rchan_buf *buf, int *is_global)
--{
--	struct dentry *f;
--
--	f = debugfs_create_file("api_event", mode, parent, buf,
--				&relay_file_operations);
--	if (IS_ERR(f))
--		return NULL;
--
--	*is_global = 1;
--
--	return f;
--}
--
--static int
--remove_buf_file_cb(struct dentry *f)
--{
--	debugfs_remove(f);
--
--	return 0;
--}
--
--static struct rchan_callbacks relay_ev_cb = {
--	.create_buf_file = create_buf_file_cb,
--	.remove_buf_file = remove_buf_file_cb,
--};
--
--static void
--minstrel_ht_dump_sta(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
--		     const char *type)
--{
--	struct sta_info *sta_info;
--	char info[64 + MINSTREL_GROUPS_NB * 4];
--	int ofs = 0;
--	int i;
--
--	sta_info = container_of(mi->sta, struct sta_info, sta);
--	ofs += scnprintf(info + ofs, sizeof(info) - ofs, "%llx;sta;%s;%pM;%s;%x;%x;",
--			(unsigned long long)ktime_get_real_fast_ns(), type,
--			mi->sta->addr, sta_info->sdata->name, mi->overhead,
--			mi->overhead_legacy);
--
--	ofs += scnprintf(info + ofs, sizeof(info) - ofs, "%x",
--			 mi->supported[0]);
--	for (i = 1; i < MINSTREL_GROUPS_NB; i++)
--		ofs += scnprintf(info + ofs, sizeof(info) - ofs, ";%x",
--				 mi->supported[i]);
--
--	ofs += scnprintf(info + ofs, sizeof(info) - ofs, "\n");
--
--	relay_write(mp->relay_ev, info, ofs);
--	relay_flush(mp->relay_ev);
--}
--
--void __minstrel_ht_report_sample_rates(struct minstrel_priv *mp,
--				       struct minstrel_ht_sta *mi)
--{
--	char line[128];
--	int i, j, ofs;
--
--	ofs = scnprintf(line, sizeof(line), "%llx;sample_rates;%pM",
--			(unsigned long long)ktime_get_real_fast_ns(),
--			mi->sta->addr);
--
--	for (i = 0; i < __MINSTREL_SAMPLE_TYPE_MAX; i++)
--		for (j = 0; j < MINSTREL_SAMPLE_RATES; j++)
--			ofs += scnprintf(line + ofs, sizeof(line), ";%x",
--					 mi->sample[i].cur_sample_rates[j]);
--
--	ofs += scnprintf(line + ofs, sizeof(line), "\n");
--
--	spin_lock_bh(&mp->relay_lock);
--
--	relay_write(mp->relay_ev, line, ofs);
--	relay_flush(mp->relay_ev);
--
--	spin_lock_bh(&mp->relay_lock);
--}
--
--static void
--minstrel_ht_dump_stations(struct minstrel_priv *mp, const char *type)
--{
--	struct minstrel_ht_sta *mi;
--
--	rcu_read_lock();
--	spin_lock_bh(&mp->relay_lock);
--
--	list_for_each_entry_rcu(mi, &mp->stations, list)
--		minstrel_ht_dump_sta(mp, mi, type);
--
--	spin_unlock_bh(&mp->relay_lock);
--	rcu_read_unlock();
--}
--
--static void
--minstrel_ht_api_start(struct minstrel_priv *mp, char *params)
--{
--	char *cur;
--	u8 mask = 0;
--
--	while ((cur = strsep(&params, ";")) != NULL) {
--		if (!strlen(cur))
--			break;
--
--		if (!strcmp(cur, "txs"))
--			mask |= MINSTREL_MONITOR_TXS;
--		else if (!strcmp(cur, "rxs"))
--			mask |= MINSTREL_MONITOR_RXS;
--		else if (!strcmp(cur, "sta"))
--			mask |= MINSTREL_MONITOR_STA;
--		else if (!strcmp(cur, "stats"))
--			mask |= MINSTREL_MONITOR_STATS;
--	}
--
--	if (!mask)
--		mask = MINSTREL_MONITOR_TXS;
--
--	if (!mp->monitor)
--		minstrel_ht_dump_stations(mp, "add");
--	mp->monitor = mask | MINSTREL_MONITOR_STA;
--}
--
--static void
--minstrel_ht_api_stop(struct minstrel_priv *mp)
--{
--	spin_lock_bh(&mp->relay_lock);
--	mp->monitor = 0;
--	relay_reset(mp->relay_ev);
--	spin_unlock_bh(&mp->relay_lock);
--}
--
--static void
--minstrel_ht_reset_sample_table(struct minstrel_ht_sta *mi)
--{
--	int i;
--
--	for (i = 0; i < __MINSTREL_SAMPLE_TYPE_MAX; i++)
--		memset(mi->sample[i].sample_rates, 0,
--		       sizeof(mi->sample[i].sample_rates));
--
--	mi->sample_seq = 0;
--	mi->user_sample_rate = -1;
--	mi->user_sample_count = 0;
--}
--
--static void
--minstrel_ht_api_set_manual(struct minstrel_priv *mp, bool manual)
--{
--	struct minstrel_ht_sta *mi;
--
--	mp->manual = manual;
--
--	rcu_read_lock();
--	list_for_each_entry_rcu(mi, &mp->stations, list) {
--		spin_lock_bh(&mi->lock);
--
--		minstrel_ht_reset_sample_table(mi);
--		kfree(mi->ratetbl);
--		mi->ratetbl = NULL;
--
--		spin_unlock_bh(&mi->lock);
--	}
--	rcu_read_unlock();
--}
--
--static struct minstrel_ht_sta *
--minstrel_ht_api_get_sta(struct minstrel_priv *mp, const u8 *macaddr)
--{
--	struct minstrel_ht_sta *mi;
--
--	rcu_read_lock();
--	list_for_each_entry_rcu(mi, &mp->stations, list) {
--		if (!memcmp(mi->sta->addr, macaddr, ETH_ALEN))
--			goto out;
--	}
--	mi = NULL;
--
--out:
--	rcu_read_unlock();
--	return mi;
--}
--
--static int
--minstrel_ht_get_args(char **dest, int dest_size, char *str, char *sep)
--{
--	int i, n;
--
--	for (i = 0, n = 0; i < dest_size; i++) {
--		if (!str) {
--			dest[i] = NULL;
--			continue;
--		}
--
--		dest[i] = strsep(&str, sep);
--		if (dest[i])
--			n++;
--	}
--
--	return n;
--}
--
--static bool
--minstrel_ht_valid_rate(struct minstrel_ht_sta *mi, u32 rate)
--{
--	int group, idx;
--
--	group = MI_RATE_GROUP(rate);
--	if (group >= MINSTREL_GROUPS_NB)
--		return false;
--
--	idx = MI_RATE_IDX(rate);
--
--	return !!(mi->supported[group] & BIT(idx));
--}
--
--static int
--minstrel_ht_rate_from_str(struct minstrel_ht_sta *mi, const char *str)
--{
--	unsigned int rate;
--
--	if (kstrtouint(str, 16, &rate))
--		return -EINVAL;
--
--	if (!minstrel_ht_valid_rate(mi, rate))
--		return -EINVAL;
--
--	return rate;
--}
--
--static int
--minstrel_ht_set_probe_rate(struct minstrel_ht_sta *mi, const char *arg_str)
--{
--	char *rate_str, *count_str;
--	unsigned int count;
--	int rate;
--
--	if (!arg_str)
--		return -EINVAL;
--
--	count_str = arg_str;
--	rate_str = strsep(&count_str, ",");
--
--	rate = minstrel_ht_rate_from_str(mi, rate_str);
--	if (rate < 0)
--		return rate;
--
--	if (!count_str || kstrtouint(count_str, 16, &count))
--		return -EINVAL;
--
--	mi->user_sample_rate = rate;
--	mi->user_sample_count = count;
--	return 0;
--}
--
--static int
--minstrel_ht_set_rates(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
--		      char **stages, unsigned int n_stages)
--{
--	struct ieee80211_sta_rates *ratetbl;
--	char *parts[2];
--	unsigned int count;
--	int n_parts, rate;
--	int err = -EINVAL;
--	int i;
--
--	if (!stages || !stages[0] || !n_stages)
--		return -EINVAL;
--
--	if (!mi->ratetbl)
--		mi->ratetbl = kzalloc(sizeof(*ratetbl), GFP_ATOMIC);
--
--	ratetbl = mi->ratetbl;
--	if (!ratetbl)
--		return -ENOMEM;
--
--	memset(ratetbl, 0, sizeof(*ratetbl));
--	for (i = 0; i < n_stages; i++) {
--		n_parts = minstrel_ht_get_args(parts, ARRAY_SIZE(parts),
--					       stages[i], ",");
--		if (n_parts < 2)
--			goto error;
--
--		rate = minstrel_ht_rate_from_str(mi, parts[0]);
--		if (rate < 0)
--			goto error;
--
--		if (kstrtouint(parts[1], 16, &count))
--			goto error;
--
--		minstrel_ht_set_rate(mp, mi, ratetbl, i, rate);
--		ratetbl->rate[i].count = count;
--		ratetbl->rate[i].count_rts = count;
--		ratetbl->rate[i].count_cts = count;
--	}
--	if (!i)
--		goto error;
--
--	ratetbl = kmemdup(ratetbl, sizeof(*ratetbl), GFP_KERNEL);
--	if (!ratetbl)
--		return -ENOMEM;
--
--	rate_control_set_rates(mp->hw, mi->sta, ratetbl);
--
--	return 0;
--
--error:
--	kfree(ratetbl);
--	mi->ratetbl = NULL;
--
--	return err;
--}
--
--static int
--minstrel_ht_api_sta_cmd(struct minstrel_priv *mp, enum sta_cmd cmd,
--			char *arg_str)
--{
--	struct minstrel_ht_sta *mi;
--	uint8_t macaddr[ETH_ALEN];
--	char *args[5];
--	int n_args;
--	int ret = -EINVAL;
--
--	if (!mp->manual)
--		return -EINVAL;
--
--	n_args = minstrel_ht_get_args(args, ARRAY_SIZE(args), arg_str, ";");
--	if (!args[0])
--		return -EINVAL;
--
--	if (!mac_pton(args[0], macaddr))
--		return -EINVAL;
--
--	mi = minstrel_ht_api_get_sta(mp, macaddr);
--	if (!mi)
--		return -ENOENT;
--
--	spin_lock_bh(&mi->lock);
--
--	switch (cmd) {
--	case STA_CMD_PROBE:
--		ret = minstrel_ht_set_probe_rate(mi, args[1]);
--		break;
--	case STA_CMD_RC:
--		ret = minstrel_ht_set_rates(mp, mi, &args[1], n_args - 1);
--		break;
--	}
--
--	spin_unlock_bh(&mi->lock);
--	return ret;
--}
--
--static void
--minstrel_ht_reset_sta_rc_stats(struct minstrel_priv *mp, struct minstrel_ht_sta *mi)
--{
--	mi->ampdu_len = 0;
--	mi->ampdu_packets = 0;
--	mi->avg_ampdu_len = MINSTREL_FRAC(1, 1);
--	memset(&mi->max_tp_rate, 0, sizeof(u16) * MAX_THR_RATES);
--	mi->max_prob_rate = 0;
--	mi->total_packets = 0;
--	mi->sample_packets = 0;
--	mi->sample_rate = 0;
--	memset(&mi->sample, 0, sizeof(struct minstrel_sample_category) *
--			       __MINSTREL_SAMPLE_TYPE_MAX);
--	memset(&mi->groups, 0, sizeof(struct minstrel_mcs_group_data) *
--			       MINSTREL_GROUPS_NB);
--
--	minstrel_ht_update_stats(mp, mi);
--}
--
--static int
--minstrel_ht_reset_stats(struct minstrel_priv *mp, char *buf)
--{
--	struct minstrel_ht_sta *mi;
--	uint8_t macaddr[ETH_ALEN];
--	int err = 0;
--
--	rcu_read_lock();
--
--	if (!buf) {
--		list_for_each_entry(mi, &mp->stations, list)
--			minstrel_ht_reset_sta_rc_stats(mp, mi);
--		goto out;
--	}
--
--	if (!mac_pton(buf, macaddr)) {
--		err = -EINVAL;
--		goto out;
--	}
--
--	mi = minstrel_ht_api_get_sta(mp, macaddr);
--	if (!mi) {
--		err = -ENOENT;
--		goto out;
--	}
--
--	minstrel_ht_reset_sta_rc_stats(mp, mi);
--
--out:
--	rcu_read_unlock();
--
--	return err;
--}
--
--static int
--minstrel_ht_execute_and_echo(struct minstrel_priv *mp, char *cmd, char *args)
--{
--	char buf[96];
--	int err = 0, len;
--
--	len = scnprintf(buf, sizeof(buf), "%llx;%s",
--			(unsigned long long)ktime_get_real_fast_ns(), cmd);
--	if (args)
--		len += scnprintf(buf + len, sizeof(buf) - len, ";%s\n", args);
--	else
--		len += scnprintf(buf + len, sizeof(buf) - len, "\n");
--
--	if (!strcmp(cmd, "start"))
--		minstrel_ht_api_start(mp, args);
--	else if (!strcmp(cmd, "stop"))
--		minstrel_ht_api_stop(mp);
--	else if (!strcmp(cmd, "manual"))
--		minstrel_ht_api_set_manual(mp, true);
--	else if (!strcmp(cmd, "auto"))
--		minstrel_ht_api_set_manual(mp, false);
--	else if (!strcmp(cmd, "reset_stats"))
--		err = minstrel_ht_reset_stats(mp, args);
--	else
--		err = -EINVAL;
--
--	if (err)
--		return err;
--
--	spin_lock_bh(&mp->relay_lock);
--	relay_write(mp->relay_ev, buf, len);
--	relay_flush(mp->relay_ev);
--	spin_unlock_bh(&mp->relay_lock);
--
--	return 0;
--}
--
--static ssize_t
--minstrel_ht_control_write(struct file *file, const char __user *userbuf,
--			  size_t count, loff_t *ppos)
--{
--	struct minstrel_priv *mp = file->private_data;
--	char *pos, *cur;
--	char buf[64];
--	size_t len = count;
--	int err;
--
--	if (len > sizeof(buf) - 1)
--		return -EINVAL;
--
--	if (copy_from_user(buf, userbuf, len))
--		return -EFAULT;
--
--	if (count > 0 && buf[len - 1] == '\n')
--		len--;
--
--	buf[len] = 0;
--	if (!len)
--		return count;
--
--	pos = buf;
--	cur = strsep(&pos, ";");
--
--	err = 0;
--	if (!strcmp(cur, "dump"))
--		minstrel_ht_dump_stations(mp, "dump");
--	else if (!strcmp(cur, "set_rates") || !strcmp(cur, "rates"))
--		err = minstrel_ht_api_sta_cmd(mp, STA_CMD_RC, pos);
--	else if (!strcmp(cur, "set_probe"))
--		err = minstrel_ht_api_sta_cmd(mp, STA_CMD_PROBE, pos);
--	else
--		err = minstrel_ht_execute_and_echo(mp, cur, pos);
--
--	if (err)
--		return err;
--
--	return count;
--}
--
--static const struct file_operations fops_control = {
--	.open = simple_open,
--	.llseek = generic_file_llseek,
--	.write = minstrel_ht_control_write,
--};
--
--void minstrel_ht_sta_update(struct minstrel_priv *mp, struct minstrel_ht_sta *mi)
--{
--	bool add = list_empty(&mi->list);
--
--	if (add) {
--		spin_lock_bh(&mp->sta_wlock);
--		list_add_rcu(&mi->list, &mp->stations);
--		spin_unlock_bh(&mp->sta_wlock);
--	}
--
--	if (mp->monitor) {
--		spin_lock_bh(&mp->relay_lock);
--		minstrel_ht_dump_sta(mp, mi, add ? "add" : "update");
--		spin_unlock_bh(&mp->relay_lock);
--	}
--}
--
--void minstrel_ht_sta_remove(struct minstrel_priv *mp, struct minstrel_ht_sta *mi)
--{
--	char info[64];
--	int ofs = 0;
--
--	spin_lock_bh(&mp->sta_wlock);
--
--	list_del_rcu(&mi->list);
--	INIT_LIST_HEAD_RCU(&mi->list);
--
--	spin_unlock_bh(&mp->sta_wlock);
--
--	if (!mp->monitor)
--		return;
--
--
--	ofs = scnprintf(info, sizeof(info), "%llx;sta;remove;%pM;;;\n",
--			(unsigned long long)ktime_get_real_fast_ns(),
--			mi->sta->addr);
--
--	spin_lock_bh(&mp->relay_lock);
--
--	relay_write(mp->relay_ev, info, ofs);
--	relay_flush(mp->relay_ev);
--
--	spin_unlock_bh(&mp->relay_lock);
--}
--
--void __minstrel_ht_report_tx_status(struct minstrel_priv *mp,
--				    struct minstrel_ht_sta *mi,
--				    struct ieee80211_tx_info *info,
--				    u16 *rate_list,
--				    int n_rates)
--{
--	char txs[64 + IEEE80211_TX_MAX_RATES * 8];
--	int ofs = 0;
--	int i;
--
--	if (!n_rates)
--		return;
--
--
--	ofs += scnprintf(txs, sizeof(txs), "%llx;txs;%pM;%x;%x;%x",
--			 (unsigned long long)ktime_get_real_fast_ns(),
--			 mi->sta->addr,
--			 info->status.ampdu_len,
--			 info->status.ampdu_ack_len,
--			 !!(info->flags & IEEE80211_TX_CTL_RATE_CTRL_PROBE));
--
--	for (i = 0; i < n_rates; i++)
--		ofs += scnprintf(txs + ofs, sizeof(txs) - ofs, ";%x;%x",
--				 rate_list[i],
--				 info->status.rates[i].count);
--
--	for (; i < IEEE80211_TX_MAX_RATES; i++)
--		ofs += scnprintf(txs + ofs, sizeof(txs) - ofs, ";ffff;0");
--
--	ofs += scnprintf(txs + ofs, sizeof(txs) - ofs, "\n");
--
--	spin_lock_bh(&mp->relay_lock);
--
--	relay_write(mp->relay_ev, txs, ofs);
--	relay_flush(mp->relay_ev);
--
--	spin_unlock_bh(&mp->relay_lock);
--}
--
--void __minstrel_ht_report_rx_status(struct minstrel_priv *mp, u8 *addr,
--				    int last_signal, u8 chain_status,
--				    s8 *chain_signal)
--{
--	char rxs[64 + IEEE80211_MAX_CHAINS * 8];
--	int ofs = 0;
--	int i;
--
--	ofs += scnprintf(rxs, sizeof(rxs), "%llx;rxs;%pM;%x",
--			 (unsigned long long)ktime_get_real_fast_ns(),
--			 addr, last_signal);
--
--	for (i = 0; i < IEEE80211_MAX_CHAINS; i++)
--	ofs += scnprintf(rxs + ofs, sizeof(rxs) - ofs, ";%x",
--			 (chain_status & BIT(i) ? chain_signal[i] : 0x7f));
--
--	ofs += scnprintf(rxs + ofs, sizeof(rxs) - ofs, "\n");
--
--	spin_lock_bh(&mp->relay_lock);
--
--	relay_write(mp->relay_ev, rxs, ofs);
--	relay_flush(mp->relay_ev);
--
--	spin_unlock_bh(&mp->relay_lock);
--}
--
--void __minstrel_ht_report_rate_update(struct minstrel_priv *mp,
--				      struct minstrel_ht_sta *mi, u16 rate,
--				      struct minstrel_rate_stats *mrs)
--{
--	char stat[100];
--	int ofs;
--	int tp;
--
--	tp = minstrel_ht_get_tp_avg(mi, MI_RATE_GROUP(rate), MI_RATE_IDX(rate),
--				    mrs->prob_avg);
--
--
--	ofs = scnprintf(stat, sizeof(stat),
--			"%llx;stats;%pM;%x;%x;%x;%x;%x;%x;%x\n",
--			(unsigned long long)ktime_get_real_fast_ns(),
--			mi->sta->addr, rate,
--			MINSTREL_TRUNC(mrs->prob_avg * 1000), tp,
--			mrs->last_success,
--			mrs->last_attempts,
--			mrs->succ_hist, mrs->att_hist);
--
--	spin_lock_bh(&mp->relay_lock);
--
--	relay_write(mp->relay_ev, stat, ofs);
--	relay_flush(mp->relay_ev);
--
--	spin_unlock_bh(&mp->relay_lock);
--}
--
--void __minstrel_ht_report_best_rates(struct minstrel_priv *mp, struct minstrel_ht_sta *mi)
--{
--	char line[128];
--	int i, ofs;
--
--	ofs = scnprintf(line, sizeof(line), "%llx;best_rates;%pM",
--	                (unsigned long long)ktime_get_real_fast_ns(),
--	                mi->sta->addr);
--
--	for (i = 0; i < MAX_THR_RATES; i++)
--		ofs += scnprintf(line + ofs, sizeof(line), ";%x", mi->max_tp_rate[i]);
--
--	ofs += scnprintf(line + ofs, sizeof(line), ";%x\n", mi->max_prob_rate);
--
--	spin_lock_bh(&mp->relay_lock);
--
--	relay_write(mp->relay_ev, line, ofs);
--	relay_flush(mp->relay_ev);
--
--	spin_unlock_bh(&mp->relay_lock);
--}
--
--void minstrel_ht_add_debugfs_api(struct ieee80211_hw *hw, void *priv,
--				 struct dentry *dir)
--{
--	struct minstrel_priv *mp = priv;
--
--	spin_lock_init(&mp->relay_lock);
--	spin_lock_init(&mp->sta_wlock);
--
--	INIT_LIST_HEAD_RCU(&mp->stations);
--	mp->relay_ev = relay_open("api_event", dir, 256, 512, &relay_ev_cb,
--				  NULL);
--	debugfs_create_devm_seqfile(&hw->wiphy->dev, "api_info",
--				    dir, minstrel_ht_read_api_info);
--	debugfs_create_devm_seqfile(&hw->wiphy->dev, "api_phy",
--				    dir, minstrel_ht_read_phy_info);
--	debugfs_create_file("api_control", 0200, dir, mp, &fops_control);
--}
--
--void minstrel_ht_remove_debugfs_api(void *priv)
--{
--	struct minstrel_priv *mp = priv;
--
--	spin_lock_bh(&mp->relay_lock);
--	if (mp->relay_ev)
--		relay_close(mp->relay_ev);
--
--	spin_unlock_bh(&mp->relay_lock);
--}
---- a/net/mac80211/rx.c
-+++ b/net/mac80211/rx.c
-@@ -1797,7 +1797,7 @@ ieee80211_rx_h_sta_process(struct ieee80
- 	}
- 
- 	if (rx->local->rate_ctrl && test_sta_flag(sta, WLAN_STA_RATE_CONTROL)) {
--		minstrel_ht_report_rx_status(rx->local->rate_ctrl->priv, sta->addr,
-+		orca_report_rx_status(rx->local->rate_ctrl->priv, sta->addr,
- 			(!(status->flag & RX_FLAG_NO_SIGNAL_VAL) ? status->signal : -1),
- 			status->chains, status->chain_signal);
- 	}
