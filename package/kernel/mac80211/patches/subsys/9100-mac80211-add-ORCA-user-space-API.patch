@@ -698,7 +698,7 @@
  #endif
 --- /dev/null
 +++ b/net/mac80211/orca_uapi.c
-@@ -0,0 +1,1217 @@
+@@ -0,0 +1,1205 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * ORCA - Open-Source Resource Control API
@@ -888,16 +888,16 @@
 +	seq_printf(s, "drv;%s\n", wiphy_dev(wiphy)->driver->name);
 +
 +	mutex_lock(&local->iflist_mtx);
-+	list_for_each_entry(sdata, &local->interfaces, list) {
-+		if (!i) {
-+			seq_printf(s, "if;%s", sdata->name);
-+			i++;
-+        	} else {
++	sdata = list_first_entry_or_null(&local->interfaces,
++					 struct ieee80211_sub_if_data, list);
++	if (sdata) {
++		seq_printf(s, "if;%s", sdata->name);
++		list_for_each_entry_continue(sdata, &local->interfaces, list)
 +			seq_printf(s, ",%s", sdata->name);
-+		}
++
++		seq_printf(s, "\n");
 +	}
 +	mutex_unlock(&local->iflist_mtx);
-+	seq_printf(s, "\n");
 +
 +	if (ieee80211_hw_check(&local->hw, SUPPORTS_TPC_PER_PACKET)) {
 +		seq_printf(s, "tpc;pkt");
@@ -1417,10 +1417,7 @@
 +	u16 raw;
 +	s16 txpwr;
 +
-+	if (!txpwr_str)
-+		return -EINVAL;
-+
-+	if (kstrtou16(txpwr_str, 16, &raw))
++	if (!txpwr_str || kstrtou16(txpwr_str, 16, &raw))
 +		return -EINVAL;
 +
 +	txpwr = (raw <= S16_MAX) ? (s16)raw : -1;
@@ -1436,8 +1433,7 @@
 +		 enum api_cmd cmd, char **args_str, unsigned int n_args)
 +{
 +	struct ieee80211_sta_rates *ratetbl;
-+	unsigned int i;
-+	int err = 0;
++	int i, err = 0;
 +	s16 max_tx_power;
 +	bool rc, tpc;
 +
@@ -1469,7 +1465,7 @@
 +		}
 +	}
 +	if (!i)
-+		return err;
++		return -EINVAL;
 +
 +	for (; i < IEEE80211_TX_RATE_TABLE_SIZE; i++) {
 +		mi->ratetbl->rate[i].idx = -1;
@@ -1510,10 +1506,7 @@
 +	int ret = -EINVAL;
 +
 +	n_args = orca_get_args(args, ARRAY_SIZE(args), arg_str, ";");
-+	if (!args[0])
-+		return -EINVAL;
-+
-+	if (!mac_pton(args[0], macaddr))
++	if (!args[0] || !mac_pton(args[0], macaddr))
 +		return -EINVAL;
 +
 +	mi = orca_get_sta(mp, macaddr);
@@ -1542,7 +1535,6 @@
 +		break;
 +	default:
 +		ret = -EINVAL;
-+		break;
 +	}
 +
 +	spin_unlock_bh(&mi->lock);
@@ -1640,8 +1632,10 @@
 +
 +	/* Echo command to api_event */
 +	spin_lock_bh(&mp->relay_lock);
++
 +	relay_write(mp->relay_ev, buf, len);
 +	relay_flush(mp->relay_ev);
++
 +	spin_unlock_bh(&mp->relay_lock);
 +
 +	return 0;
@@ -1753,7 +1747,6 @@
 +	if (!mp->monitor)
 +		return;
 +
-+
 +	ofs = scnprintf(info, sizeof(info), "%llx;sta;remove;%pM;;;\n",
 +			(unsigned long long)ktime_get_real_fast_ns(),
 +			mi->sta->addr);
@@ -1767,11 +1760,9 @@
 +}
 +
 +void __orca_report_tx_status(struct minstrel_priv *mp,
-+				    struct minstrel_ht_sta *mi,
-+				    struct ieee80211_tx_info *info,
-+				    u16 *rate_list,
-+				    s16 *txpwr_list,
-+				    int n_rates)
++			     struct minstrel_ht_sta *mi,
++			     struct ieee80211_tx_info *info,
++			     u16 *rate_list, s16 *txpwr_list, int n_rates)
 +{
 +	char txs[64 + IEEE80211_TX_MAX_RATES * 14];
 +	int ofs = 0;
@@ -1779,7 +1770,6 @@
 +
 +	if (!n_rates)
 +		return;
-+
 +
 +	ofs += scnprintf(txs, sizeof(txs), "%llx;txs;%pM;%x;%x;%x",
 +			 (unsigned long long)ktime_get_real_fast_ns(),
@@ -1838,8 +1828,8 @@
 +}
 +
 +void __orca_report_rate_update(struct minstrel_priv *mp,
-+				      struct minstrel_ht_sta *mi, u16 rate,
-+				      struct minstrel_rate_stats *mrs)
++			       struct minstrel_ht_sta *mi, u16 rate,
++			       struct minstrel_rate_stats *mrs)
 +{
 +	char stat[100];
 +	int ofs;
@@ -1847,7 +1837,6 @@
 +
 +	tp = minstrel_ht_get_tp_avg(mi, MI_RATE_GROUP(rate), MI_RATE_IDX(rate),
 +				    mrs->prob_avg);
-+
 +
 +	ofs = scnprintf(stat, sizeof(stat),
 +			"%llx;stats;%pM;%x;%x;%x;%x;%x;%x;%x\n",
@@ -1888,8 +1877,7 @@
 +	spin_unlock_bh(&mp->relay_lock);
 +}
 +
-+void orca_add_debugfs_api(struct ieee80211_hw *hw, void *priv,
-+			  struct dentry *dir)
++void orca_add_debugfs_api(struct ieee80211_hw *hw, void *priv, struct dentry *dir)
 +{
 +	struct minstrel_priv *mp = priv;
 +
