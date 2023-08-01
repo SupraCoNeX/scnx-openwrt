@@ -8,7 +8,16 @@
  
  	/* per-STA commands */
  	STA_CMD_RC_MODE,
-@@ -384,6 +385,47 @@ orca_reset_sample_table(struct minstrel_
+@@ -133,6 +134,8 @@ orca_read_api_info(struct seq_file *s, v
+ 	seq_printf(s, "#reset_stats;macaddr\n");
+ 	seq_printf(s, "#reset_stats;all\n");
+ 
++	seq_printf(s, "#set_feature;feature;on-or-off\n");
++
+ 	for (i = 0; i < MINSTREL_GROUPS_NB; i++) {
+ 		const struct mcs_group *g = &minstrel_mcs_groups[i];
+ 		const char *type;
+@@ -384,6 +387,47 @@ orca_reset_sample_table(struct minstrel_
  }
  
  static int
@@ -56,7 +65,7 @@
  orca_sta_set_rc_mode(struct minstrel_ht_sta *mi, char *mode)
  {
  	int i;
-@@ -766,6 +808,9 @@ orca_exec_cmd(struct minstrel_priv *mp,
+@@ -766,6 +810,9 @@ orca_exec_cmd(struct minstrel_priv *mp,
  	case STA_CMD_PROBE:
  		err = orca_sta_cmd(mp, cmd, args);
  		break;
@@ -66,7 +75,7 @@
  	default:
  		err = -EINVAL;
  	}
-@@ -855,6 +900,8 @@ orca_control_write(struct file *file, co
+@@ -855,6 +902,8 @@ orca_control_write(struct file *file, co
  		cmd = STA_CMD_TPC_MODE;
  	} else if (!strcmp(cur, "reset_stats")) {
  		cmd = STA_CMD_RESET_STATS;
