@@ -912,7 +912,7 @@
 +	for (i = 0; i < local->hw.n_txpower_ranges; i++) {
 +		struct ieee80211_hw_txpower_range *rng = &local->hw.txpower_ranges[i];
 +		seq_printf(s, ";%x,%x,%x,%x", rng->start_idx, rng->n_levels,
-+			   rng->start_pwr, rng->pwr_step);
++			   (u8)rng->start_pwr, (u8)rng->pwr_step);
 +	}
 +	seq_printf(s, "\n");
 +
