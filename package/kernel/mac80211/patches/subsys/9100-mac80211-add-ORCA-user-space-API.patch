@@ -698,7 +698,7 @@
  #endif
 --- /dev/null
 +++ b/net/mac80211/orca_uapi.c
-@@ -0,0 +1,1205 @@
+@@ -0,0 +1,1200 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * ORCA - Open-Source Resource Control API
@@ -1724,11 +1724,9 @@
 +		spin_unlock_bh(&mp->sta_wlock);
 +	}
 +
-+	if (mp->monitor) {
-+		spin_lock_bh(&mp->relay_lock);
-+		orca_dump_sta(mp, mi, add ? "add" : "update");
-+		spin_unlock_bh(&mp->relay_lock);
-+	}
++	spin_lock_bh(&mp->relay_lock);
++	orca_dump_sta(mp, mi, add ? "add" : "update");
++	spin_unlock_bh(&mp->relay_lock);
 +}
 +
 +void orca_sta_remove(struct minstrel_priv *mp, struct minstrel_ht_sta *mi)
@@ -1743,9 +1741,6 @@
 +	kfree(mi->ratetbl);
 +
 +	spin_unlock_bh(&mp->sta_wlock);
-+
-+	if (!mp->monitor)
-+		return;
 +
 +	ofs = scnprintf(info, sizeof(info), "%llx;sta;remove;%pM;;;\n",
 +			(unsigned long long)ktime_get_real_fast_ns(),
