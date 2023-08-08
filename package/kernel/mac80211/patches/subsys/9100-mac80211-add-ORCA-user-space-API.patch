@@ -1237,7 +1237,7 @@
 +		return -EINVAL;
 +
 +	orca_reset_sample_table(mi);
-+	for (i = 0; i < sizeof(mi->ratetbl->rate); i++) {
++	for (i = 0; i < ARRAY_SIZE(mi->ratetbl->rate); i++) {
 +		mi->ratetbl->rate[i].idx = -1;
 +		mi->ratetbl->rate[i].count = 0;
 +		mi->ratetbl->rate[i].count_rts = 0;
@@ -1266,7 +1266,7 @@
 +	else
 +		return -EINVAL;
 +
-+	for (i = 0; i < sizeof(mi->ratetbl->rate); i++)
++	for (i = 0; i < ARRAY_SIZE(mi->ratetbl->rate); i++)
 +		mi->ratetbl->rate[i].txpower_idx = -1;
 +
 +	return 0;
@@ -1450,7 +1450,7 @@
 +	if (tpc)
 +		max_tx_power = ieee80211_hw_get_max_txpower_idx(mp->hw);
 +
-+	for (i = 0; i < min_t(unsigned int, n_args, sizeof(ratetbl->rate)); i++) {
++	for (i = 0; i < min_t(unsigned int, n_args, ARRAY_SIZE(ratetbl->rate)); i++) {
 +		if (rc) {
 +			err = orca_ratetbl_set_rate_count(mp, mi, &args_str[i], i);
 +			if (err)
@@ -1467,7 +1467,7 @@
 +	if (!i)
 +		return -EINVAL;
 +
-+	for (; i < IEEE80211_TX_RATE_TABLE_SIZE; i++) {
++	for (; i < ARRAY_SIZE(ratetbl->rate); i++) {
 +		mi->ratetbl->rate[i].idx = -1;
 +		mi->ratetbl->rate[i].count = 0;
 +		mi->ratetbl->rate[i].txpower_idx = -1;
