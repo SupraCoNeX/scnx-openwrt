@@ -1,6 +1,6 @@
 --- a/drivers/net/wireless/ath/ath9k/main.c
 +++ b/drivers/net/wireless/ath/ath9k/main.c
-@@ -2803,6 +2803,8 @@ ath9k_get_feature_state(struct ieee80211
+@@ -2804,6 +2804,8 @@ ath9k_get_feature_state(struct ieee80211
  	switch (feature) {
  	case IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY:
  		return !(sc->sc_ah->common.disable_ani);
@@ -9,7 +9,7 @@
  	default:
  		return -1;
  	}
-@@ -2819,6 +2821,15 @@ ath9k_set_feature_state(struct ieee80211
+@@ -2820,6 +2822,15 @@ ath9k_set_feature_state(struct ieee80211
  	case IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY:
  		ath9k_set_ani(sc, enable);
  		break;
