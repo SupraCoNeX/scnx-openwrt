@@ -1215,7 +1215,7 @@
 +		return -EPERM;
 +
 +	res = local->ops->set_feature_state(mp->hw, feature, enable);
-+	if (!res)
++	if (res)
 +		return -EIO; /* TODO: more suitable error? */
 +
 +	return 0;
