@@ -698,7 +698,7 @@
  #endif
 --- /dev/null
 +++ b/net/mac80211/orca_uapi.c
-@@ -0,0 +1,1200 @@
+@@ -0,0 +1,1210 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * ORCA - Open-Source Resource Control API
@@ -1228,6 +1228,8 @@
 +
 +	if (!mode)
 +		return -EINVAL;
++	if (!mi->ratetbl)
++		return -EFAULT;
 +
 +	if (!strcmp(mode, "manual"))
 +		mi->rc_manual = true;
@@ -1258,6 +1260,8 @@
 +
 +	if (!mode)
 +		return -EINVAL;
++	if (!mi->ratetbl)
++		return -EFAULT;
 +
 +	if (!strcmp(mode, "manual"))
 +		mi->tpc_manual = true;
@@ -1731,6 +1735,7 @@
 +
 +void orca_sta_remove(struct minstrel_priv *mp, struct minstrel_ht_sta *mi)
 +{
++	struct ieee80211_sta_rates *ratetbl = mi->ratetbl;
 +	char info[64];
 +	int ofs = 0;
 +
@@ -1738,8 +1743,13 @@
 +
 +	list_del_rcu(&mi->list);
 +	INIT_LIST_HEAD_RCU(&mi->list);
-+	kfree(mi->ratetbl);
 +
++	spin_lock(&mi->lock);
++
++	mi->ratetbl = NULL;
++	kfree(ratetbl);
++
++	spin_unlock(&mi->lock);
 +	spin_unlock_bh(&mp->sta_wlock);
 +
 +	ofs = scnprintf(info, sizeof(info), "%llx;sta;remove;%pM;;;\n",
