@@ -1507,7 +1507,7 @@
 +	uint8_t macaddr[ETH_ALEN];
 +	char *args[5];
 +	int n_args;
-+	int ret = -EINVAL;
++	int ret = 0;
 +
 +	n_args = orca_get_args(args, ARRAY_SIZE(args), arg_str, ";");
 +	if (!args[0] || !mac_pton(args[0], macaddr))
