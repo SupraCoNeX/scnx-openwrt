@@ -1,0 +1,12 @@
+--- a/tx.c
++++ b/tx.c
+@@ -69,6 +69,9 @@ mt76_tx_status_unlock(struct mt76_dev *d
+ 			status.sta = wcid_to_sta(wcid);
+ 			if (status.sta && (wcid->rate.flags || wcid->rate.legacy)) {
+ 				rs.rate_idx = wcid->rate;
++				rs.try_count = 1;
++				rs.txpower_idx = -1;
++
+ 				status.rates = &rs;
+ 				status.n_rates = 1;
+ 			} else {
