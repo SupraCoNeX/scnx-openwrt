@@ -1,0 +1,1971 @@
+--- a/net/mac80211/ieee80211_i.h
++++ b/net/mac80211/ieee80211_i.h
+@@ -1603,6 +1603,14 @@ struct ieee80211_local {
+ 		struct dentry *keys;
+ 	} debugfs;
+ 	bool force_tx_status;
++
++	struct {
++		struct dentry *debugfsdir;
++		struct rchan *relay_ev;
++		spinlock_t relay_lock;
++
++		u16 monitor;
++	} orca;
+ #endif
+ 
+ 	/*
+--- a/net/mac80211/orca_uapi.c
++++ b/net/mac80211/orca_uapi.c
+@@ -3,7 +3,7 @@
+  * ORCA - Open-Source Resource Control API
+  *
+  * Copyright (C) 2021 Felix Fietkau <nbd@nbd.name>
+- * Copyright (C) 2021-2023 SupraCoNeX <supraconex@gmail.com>
++ * Copyright (C) 2021-2025 SupraCoNeX <supraconex@gmail.com>
+  */
+ #include <linux/kernel.h>
+ #include <linux/debugfs.h>
+@@ -11,6 +11,7 @@
+ #include <net/mac80211.h>
+ #include "ieee80211_i.h"
+ #include "rate.h"
++#include "orca_uapi.h"
+ #include "rc80211_minstrel_ht.h"
+ 
+ /*
+@@ -18,9 +19,9 @@
+  * increase minor version for non-breaking features
+  * increase patch version for all other small, non-breaking changes
+  */
+-#define ORCA_MAJOR_VERSION 3
+-#define ORCA_MINOR_VERSION 1
+-#define ORCA_PATCH_VERSION 1
++#define ORCA_MAJOR_VERSION 4
++#define ORCA_MINOR_VERSION 0
++#define ORCA_PATCH_VERSION 0
+ 
+ extern u8 sample_table[SAMPLE_COLUMNS][MCS_GROUP_RATES];
+ 
+@@ -33,6 +34,7 @@ static char *feature_pretty[] = {
+ };
+ 
+ typedef enum {
++	API_CMD_LOG,
+ 	PHY_CMD_START,
+ 	PHY_CMD_STOP,
+ 	PHY_CMD_DUMP,
+@@ -40,6 +42,11 @@ typedef enum {
+ 	PHY_CMD_SET_FEATURE,
+ 	PHY_CMD_GET,
+ 
++	/* from here on the commands require that the
++	 * PHY uses Minstrel RC.
++	 * see also CMD_NEEDS_MINSTREL macro below
++	 */
++
+ 	/* per-STA commands */
+ 	STA_CMD_RC_MODE,
+ 	STA_CMD_TPC_MODE,
+@@ -49,14 +56,14 @@ typedef enum {
+ 	STA_CMD_TPC,
+ 	STA_CMD_RC,
+ 
+-	/* general API commands */
+-	API_CMD_LOG,
+-
+ 	/* keep last, obviously */
+ 	NUM_API_CMDS,
+ } orca_cmd;
+ 
++#define CMD_NEEDS_MINSTREL(cmd)		(cmd > PHY_CMD_GET)
++
+ static const char *ORCA_CMD_STR[] = {
++	"log",
+ 	"start",
+ 	"stop",
+ 	"dump",
+@@ -71,11 +78,71 @@ static const char *ORCA_CMD_STR[] = {
+ 	"set_rates_power",
+ 	"set_power",
+ 	"set_rates",
+-
+-	"log",
+ };
+ 
+-static void
++u32 orca_encode_rate(struct rate_info *ri)
++{
++	u32 orca_rate = 0;
++
++	if (ri->flags & RATE_INFO_FLAGS_MCS) {
++		orca_rate |= FIELD_PREP(ORCA_RATE_KIND, ORCA_RATE_HT);
++
++		if (ri->flags & RATE_INFO_FLAGS_SHORT_GI)
++			orca_rate |= FIELD_PREP(ORCA_RATE_GI, ORCA_RATE_GI_0_4);
++	} else if (ri->flags & RATE_INFO_FLAGS_VHT_MCS) {
++		orca_rate |= FIELD_PREP(ORCA_RATE_KIND, ORCA_RATE_VHT);
++
++		if (ri->flags & RATE_INFO_FLAGS_SHORT_GI)
++			orca_rate |= FIELD_PREP(ORCA_RATE_GI, ORCA_RATE_GI_0_4);
++	} else if (ri->flags & RATE_INFO_FLAGS_HE_MCS) {
++		orca_rate |= FIELD_PREP(ORCA_RATE_KIND, ORCA_RATE_HE);
++
++		if (ri->he_gi == NL80211_RATE_INFO_HE_GI_1_6)
++			orca_rate |= FIELD_PREP(ORCA_RATE_GI, ORCA_RATE_GI_1_6);
++		else if (ri->he_gi == NL80211_RATE_INFO_HE_GI_3_2)
++			orca_rate |= FIELD_PREP(ORCA_RATE_GI, ORCA_RATE_GI_3_2);
++
++		if (ri->bw == RATE_INFO_BW_HE_RU)
++			orca_rate |= FIELD_PREP(ORCA_RATE_RU_ALLOC,
++						ri->he_ru_alloc);
++
++		orca_rate |= FIELD_PREP(ORCA_RATE_HE_DCM, ri->he_dcm);
++	} else if (ri->flags & RATE_INFO_FLAGS_EHT_MCS) {
++		orca_rate |= FIELD_PREP(ORCA_RATE_KIND, ORCA_RATE_EHT);
++
++		if (ri->eht_gi == NL80211_RATE_INFO_EHT_GI_1_6)
++			orca_rate |= FIELD_PREP(ORCA_RATE_GI, ORCA_RATE_GI_1_6);
++		else if (ri->eht_gi == NL80211_RATE_INFO_EHT_GI_3_2)
++			orca_rate |= FIELD_PREP(ORCA_RATE_GI, ORCA_RATE_GI_3_2);
++
++		if (ri->bw == RATE_INFO_BW_EHT_RU)
++			orca_rate |= FIELD_PREP(ORCA_RATE_RU_ALLOC,
++						ri->eht_ru_alloc);
++	} else if (ri->flags & RATE_INFO_FLAGS_S1G_MCS) {
++		orca_rate |= FIELD_PREP(ORCA_RATE_KIND, ORCA_RATE_S1G);
++	} else if (ri->flags & RATE_INFO_FLAGS_DMG) {
++		orca_rate |= FIELD_PREP(ORCA_RATE_KIND, ORCA_RATE_DMG);
++	} else if (ri->flags & RATE_INFO_FLAGS_EDMG) {
++		orca_rate |= FIELD_PREP(ORCA_RATE_KIND, ORCA_RATE_EDMG);
++		orca_rate |= FIELD_PREP(ORCA_RATE_EDMG_BOND_CH, ri->n_bonded_ch - 1);
++	} else if (ri->flags & RATE_INFO_FLAGS_EXTENDED_SC_DMG) {
++		orca_rate |= FIELD_PREP(ORCA_RATE_KIND, ORCA_RATE_EXT_SC_DMG);
++	} else {
++		orca_rate |= (FIELD_PREP(ORCA_RATE_KIND, ORCA_RATE_LEGACY) |
++			      FIELD_PREP(ORCA_RATE_BITRATE, ri->legacy) |
++			      FIELD_PREP(ORCA_RATE_BW, ri->bw));
++		return orca_rate;
++	}
++
++	if (!(ri->flags & RATE_INFO_FLAGS_MCS))
++		orca_rate |= FIELD_PREP(ORCA_RATE_NSS, ri->nss - 1);
++
++	orca_rate |= (FIELD_PREP(ORCA_RATE_MCS, ri->mcs) |
++		      FIELD_PREP(ORCA_RATE_BW, ri->bw));
++	return orca_rate;
++}
++
++void
+ orca_print_rate_durations(struct seq_file *s, int group)
+ {
+ 	const struct mcs_group *g = &minstrel_mcs_groups[group];
+@@ -98,7 +165,10 @@ orca_print_rate_durations(struct seq_fil
+ static int
+ orca_read_api_info(struct seq_file *s, void *data)
+ {
++	struct wiphy *wiphy = container_of(s->private, struct wiphy, dev);
++	struct ieee80211_local *local = wiphy_priv(wiphy);
+ 	int i, j;
++
+ 	seq_printf(s, "orca_version;%x;%x;%x\n", ORCA_MAJOR_VERSION,
+ 		   ORCA_MINOR_VERSION, ORCA_PATCH_VERSION);
+ 
+@@ -172,6 +242,9 @@ orca_read_api_info(struct seq_file *s, v
+ 	seq_printf(s, "#set_feature;feature;state\n");
+ 	seq_printf(s, "#get;property\n");
+ 
++	if (!orca_phy_uses_minstrel(local))
++		return 0;
++
+ 	for (i = 0; i < MINSTREL_GROUPS_NB; i++) {
+ 		const struct mcs_group *g = &minstrel_mcs_groups[i];
+ 		const char *type;
+@@ -191,6 +264,7 @@ orca_read_api_info(struct seq_file *s, v
+ 		orca_print_rate_durations(s, i);
+ 		seq_printf(s, "\n");
+ 	}
++
+ 	seq_printf(s, "sample_table;%x;%x", SAMPLE_COLUMNS, MCS_GROUP_RATES);
+ 	for (i = 0; i < SAMPLE_COLUMNS; i++) {
+ 		seq_printf(s, ";");
+@@ -207,51 +281,56 @@ orca_read_api_info(struct seq_file *s, v
+ }
+ 
+ static int
+-__orca_dump_sta(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
++__orca_dump_sta(struct ieee80211_local *local, struct sta_info *sta,
+ 		char *buf, unsigned int buf_size, const char *type)
+ {
+-	struct sta_info *sta_info;
++	struct minstrel_ht_sta *mi;
+ 	int i, ofs = 0;
+ 
+-	sta_info = container_of(mi->sta, struct sta_info, sta);
+-
+ 	if (!type)
+-		ofs = scnprintf(buf, buf_size, "sta;");
++		ofs = scnprintf(buf, buf_size, "sta;%pM;%s;", sta->addr,
++				sta->sdata->name);
+ 	else
+-		ofs = scnprintf(buf, buf_size, "%llx;sta;%s;",
++		ofs = scnprintf(buf, buf_size, "%llx;sta;%s;%pM;%s;",
+ 				(unsigned long long)ktime_get_real_fast_ns(),
+-				type);
++				type, sta->addr, sta->sdata->name);
+ 
+-	ofs += scnprintf(buf + ofs, buf_size - ofs,
+-			 "%pM;%s;%s;%s;%x;%x;%x;%x",
+-			 mi->sta->addr, sta_info->sdata->name,
+-			 mi->rc_manual ? "manual" : "auto",
+-			 mi->tpc_manual ? "manual" : "auto",
+-			 mi->overhead, mi->overhead_legacy,
+-			 HZ / mi->update_interval,
+-			 HZ / mi->sample_interval);
++	if (orca_phy_uses_minstrel(local)) {
++		mi = sta->rate_ctrl_priv;
+ 
+-	for (i = 0; i < MINSTREL_GROUPS_NB; i++)
+-		ofs += scnprintf(buf + ofs, buf_size - ofs, ";%x",
+-				 mi->supported[i]);
++		ofs += scnprintf(buf + ofs, buf_size - ofs,
++				 "%s;%s;%x;%x;%x;%x",
++				 mi->rc_manual ? "manual" : "auto",
++				 mi->tpc_manual ? "manual" : "auto",
++				 mi->overhead, mi->overhead_legacy,
++				 HZ / mi->update_interval,
++				 HZ / mi->sample_interval);
++
++		for (i = 0; i < MINSTREL_GROUPS_NB; i++)
++			ofs += scnprintf(buf + ofs, buf_size - ofs, ";%x",
++					 mi->supported[i]);
++	} else {
++		ofs += scnprintf(buf + ofs, buf_size - ofs, ";;;;;");
++		/* TODO: print sta caps? */
++	}
+ 
+ 	ofs += scnprintf(buf + ofs, buf_size - ofs, "\n");
+ 	return ofs;
+ }
+ 
+ static unsigned int
+-__orca_dump_features(struct minstrel_priv *mp, char *buf, unsigned int buf_size)
++__orca_dump_features(struct ieee80211_local *local, char *buf, unsigned int buf_size)
+ {
+-	struct ieee80211_local *local = hw_to_local(mp->hw);
++	struct ieee80211_hw *hw = &local->hw;
+ 	unsigned int i, cnt;
+ 	s16 state;
+ 
+-	cnt = scnprintf(buf, buf_size, "ftrs;%lx", hweight_long(mp->hw->feature_ctrl));
++	cnt = scnprintf(buf, buf_size, "ftrs;%lx", hweight_long(hw->feature_ctrl));
+ 	for (i = 0; i < NUM_IEEE80211_FTRCTRL; i++) {
+-		if (!ieee80211_feature_ctrl_has(mp->hw, i))
++		if (!ieee80211_feature_ctrl_has(hw, i))
+ 			continue;
+ 
+-		state = local->ops->get_feature_state(mp->hw, i);
++		state = local->ops->get_feature_state(hw, i);
+ 		cnt += scnprintf(buf + cnt, buf_size - cnt, ";%s,%x",
+ 				 feature_pretty[i], (u16)state);
+ 	}
+@@ -265,43 +344,38 @@ orca_read_phy_info(struct seq_file *s, v
+ {
+ 	struct wiphy *wiphy = container_of(s->private, struct wiphy, dev);
+ 	struct ieee80211_local *local = wiphy_priv(wiphy);
++	struct ieee80211_hw *hw = &local->hw;
+ 	struct ieee80211_sub_if_data *sdata;
+-	struct minstrel_priv *mp = local->rate_ctrl->priv;
+-	struct minstrel_ht_sta *mi;
++	struct sta_info *sta;
+ 	char *buf_ref;
+ 	int i, power_limit, len;
++	bool minstrel_used = orca_phy_uses_minstrel(local);
+ 
++	seq_printf(s, "rc;%s\n", minstrel_used ? "mac" : "fw");
+ 	seq_printf(s, "drv;%s\n", wiphy_dev(wiphy)->driver->name);
+ 
+-	if (ieee80211_hw_check(&local->hw, SUPPORTS_TPC_PER_PACKET)) {
++	if (ieee80211_hw_check(hw, SUPPORTS_TPC_PER_PACKET)) {
+ 		seq_printf(s, "tpc;pkt");
+-	} else if (ieee80211_hw_check(&local->hw, SUPPORTS_TPC_PER_MRR)) {
++	} else if (ieee80211_hw_check(hw, SUPPORTS_TPC_PER_MRR)) {
+ 		seq_printf(s, "tpc;mrr");
+ 	} else {
+ 		seq_printf(s, "tpc;not\n");
+ 		goto skip_tpc;
+ 	}
+ 
+-	seq_printf(s, ";%u", local->hw.n_txpower_ranges);
+-	for (i = 0; i < local->hw.n_txpower_ranges; i++) {
+-		struct ieee80211_hw_txpower_range *rng = &local->hw.txpower_ranges[i];
++	seq_printf(s, ";%u", hw->n_txpower_ranges);
++	for (i = 0; i < hw->n_txpower_ranges; i++) {
++		struct ieee80211_hw_txpower_range *rng = &hw->txpower_ranges[i];
+ 		seq_printf(s, ";%x,%x,%x,%x", rng->start_idx, rng->n_levels,
+ 			   (u8)rng->start_pwr, (u8)rng->pwr_step);
+ 	}
+ 	seq_printf(s, "\n");
+ 
+ skip_tpc:
+-	if (local->ops->get_txpower) {
+-		if (!local->ops->get_txpower(&local->hw, NULL, 0, &power_limit))
+-			/* use 0.5 dBm steps, ath9k and other drivers
+-			 * implementing get_txpower use that anyway */
+-			seq_printf(s, "pwr_limit;%x\n", power_limit * 2);
+-	}
+-
+ 	/* Controllable feature information */
+-	if (local->ops->get_feature_state && mp->hw->feature_ctrl) {
++	if (local->ops->get_feature_state && hw->feature_ctrl) {
+ 		len = seq_get_buf(s, &buf_ref);
+-		len = __orca_dump_features(mp, buf_ref, len);
++		len = __orca_dump_features(local, buf_ref, len);
+ 		seq_commit(s, len);
+ 	}
+ 
+@@ -326,14 +400,18 @@ skip_tpc:
+ 		if (len)
+ 			tmp[len - 1] = 0;
+ 
+-        	seq_printf(s, "%s\n", tmp);
++		if (local->ops->get_txpower &&
++		    !local->ops->get_txpower(hw, &sdata->vif, &power_limit))
++        		seq_printf(s, "%s;%x\n", tmp, power_limit * 2);
++		else
++			seq_printf(s, "%s;\n", tmp);
+ 	}
+ 	mutex_unlock(&local->iflist_mtx);
+ 
+ 	rcu_read_lock();
+-	list_for_each_entry_rcu(mi, &mp->stations, list) {
++	list_for_each_entry_rcu(sta, &local->sta_list, list) {
+ 		len = seq_get_buf(s, &buf_ref);
+-		len = __orca_dump_sta(mp, mi, buf_ref, len, NULL);
++		len = __orca_dump_sta(local, sta, buf_ref, len, NULL);
+ 		seq_commit(s, len);
+ 	}
+ 	rcu_read_unlock();
+@@ -342,50 +420,50 @@ skip_tpc:
+ }
+ 
+ static void
+-orca_dump_sta(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
++orca_dump_sta(struct ieee80211_local *local, struct sta_info *sta,
+ 	      const char *type)
+ {
+ 	/* see __orca_dump_sta for that size */
+ 	char info[128 + MINSTREL_GROUPS_NB * 4];
+ 	int count;
+ 
+-	count = __orca_dump_sta(mp, mi, info, sizeof(info), type);
++	count = __orca_dump_sta(local, sta, info, sizeof(info), type);
+ 
+-	relay_write(mp->relay_ev, info, count);
+-	relay_flush(mp->relay_ev);
++	relay_write(local->orca.relay_ev, info, count);
++	relay_flush(local->orca.relay_ev);
+ }
+ 
+ static void
+-orca_dump_stations(struct minstrel_priv *mp, const char *type)
++orca_dump_stations(struct ieee80211_local *local, const char *type)
+ {
+-	struct minstrel_ht_sta *mi;
++	struct sta_info *sta;
+ 
+ 	rcu_read_lock();
+-	spin_lock_bh(&mp->relay_lock);
++	spin_lock_bh(&local->orca.relay_lock);
+ 
+-	list_for_each_entry_rcu(mi, &mp->stations, list)
+-		orca_dump_sta(mp, mi, type);
++	list_for_each_entry_rcu(sta, &local->sta_list, list)
++		orca_dump_sta(local, sta, type);
+ 
+-	spin_unlock_bh(&mp->relay_lock);
++	spin_unlock_bh(&local->orca.relay_lock);
+ 	rcu_read_unlock();
+ }
+ 
+ static void
+-orca_dump_features(struct minstrel_priv *mp)
++orca_dump_features(struct ieee80211_local *local)
+ {
+ 	char buf[256];
+ 	unsigned int cnt, size = 256;
+ 
+ 	cnt = scnprintf(buf, size, "%llx;",
+ 			(unsigned long long)ktime_get_real_fast_ns());
+-	cnt += __orca_dump_features(mp, buf + cnt, size - cnt);
++	cnt += __orca_dump_features(local, buf + cnt, size - cnt);
+ 
+-	spin_lock_bh(&mp->relay_lock);
++	spin_lock_bh(&local->orca.relay_lock);
+ 
+-	relay_write(mp->relay_ev, buf, cnt);
+-	relay_flush(mp->relay_ev);
++	relay_write(local->orca.relay_ev, buf, cnt);
++	relay_flush(local->orca.relay_ev);
+ 
+-	spin_unlock_bh(&mp->relay_lock);
++	spin_unlock_bh(&local->orca.relay_lock);
+ }
+ 
+ static int
+@@ -408,16 +486,16 @@ orca_get_args(char **dest, int dest_size
+ }
+ 
+ static inline void
+-orca_event_write(struct minstrel_priv *mp, char *buf, unsigned int len)
++orca_event_write(struct ieee80211_local *local, char *buf, unsigned int len)
+ {
+-	spin_lock_bh(&mp->relay_lock);
+-	relay_write(mp->relay_ev, buf, len);
+-	relay_flush(mp->relay_ev);
+-	spin_unlock_bh(&mp->relay_lock);
++	spin_lock_bh(&local->orca.relay_lock);
++	relay_write(local->orca.relay_ev, buf, len);
++	relay_flush(local->orca.relay_ev);
++	spin_unlock_bh(&local->orca.relay_lock);
+ }
+ 
+ static void
+-orca_print_cmd(struct minstrel_priv *mp, orca_cmd cmd, char **args,
++orca_print_cmd(struct ieee80211_local *local, orca_cmd cmd, char **args,
+ 	       int n_args, const char *fmt, ...)
+ {
+ 	va_list vargs;
+@@ -440,13 +518,13 @@ orca_print_cmd(struct minstrel_priv *mp,
+ 	}
+ 	len += scnprintf(buf + len, sizeof(buf) - len, "\n");
+ 
+-	orca_event_write(mp, buf, len);
++	orca_event_write(local, buf, len);
+ }
+ 
+-#define orca_print_sta_cmd(mp, mi, cmd, args, n_args) \
+-	orca_print_cmd(mp, cmd, args, n_args, "%pM", mi->sta->addr)
+-#define orca_print_if_cmd(mp, sdata, cmd, args, n_args) \
+-	orca_print_cmd(mp, cmd, args, n_args, "%s", sdata->name)
++#define orca_print_sta_cmd(local, sta, cmd, args, n_args) \
++	orca_print_cmd(local, cmd, args, n_args, "%pM", sta->addr)
++#define orca_print_if_cmd(local, sdata, cmd, args, n_args) \
++	orca_print_cmd(local, cmd, args, n_args, "%s", sdata->name)
+ 
+ static u8
+ _parse_monitor_mask(char **params)
+@@ -475,9 +553,8 @@ _parse_monitor_mask(char **params)
+ }
+ 
+ static int
+-orca_start_monitoring(struct minstrel_priv *mp, char *params)
++orca_start_monitoring(struct ieee80211_local *local, char *params)
+ {
+-	struct ieee80211_local *local = hw_to_local(mp->hw);
+ 	struct ieee80211_sub_if_data *sdata;
+ 	char buf[32], *cur, *ref;
+ 	int ret;
+@@ -500,10 +577,10 @@ orca_start_monitoring(struct minstrel_pr
+ 	list_for_each_entry(sdata, &local->interfaces, list) {
+ 		if (all) {
+ 			sdata->orca_monitor |= mask;
+-			orca_print_if_cmd(mp, sdata, PHY_CMD_START, &ref, 1);
++			orca_print_if_cmd(local, sdata, PHY_CMD_START, &ref, 1);
+ 		} else if (!strcmp(sdata->name, cur)) {
+ 			sdata->orca_monitor |= mask;
+-			orca_print_if_cmd(mp, sdata, PHY_CMD_START, &ref, 1);
++			orca_print_if_cmd(local, sdata, PHY_CMD_START, &ref, 1);
+ 
+ 			ret = 0;
+ 			break;
+@@ -515,9 +592,8 @@ orca_start_monitoring(struct minstrel_pr
+ }
+ 
+ static int
+-orca_stop_monitoring(struct minstrel_priv *mp, char *params)
++orca_stop_monitoring(struct ieee80211_local *local, char *params)
+ {
+-	struct ieee80211_local *local = hw_to_local(mp->hw);
+ 	struct ieee80211_sub_if_data *sdata;
+ 	char buf[32], *cur, *ref;
+ 	int ret;
+@@ -541,10 +617,10 @@ orca_stop_monitoring(struct minstrel_pri
+ 	list_for_each_entry(sdata, &local->interfaces, list) {
+ 		if (all) {
+ 			sdata->orca_monitor &= ~mask;
+-			orca_print_if_cmd(mp, sdata, PHY_CMD_STOP, &ref, 1);
++			orca_print_if_cmd(local, sdata, PHY_CMD_STOP, &ref, 1);
+ 		} else if (!strcmp(sdata->name, cur)) {
+ 			sdata->orca_monitor &= ~mask;
+-			orca_print_if_cmd(mp, sdata, PHY_CMD_STOP, &ref, 1);
++			orca_print_if_cmd(local, sdata, PHY_CMD_STOP, &ref, 1);
+ 			ret = 0;
+ 			break;
+ 		}
+@@ -552,9 +628,9 @@ orca_stop_monitoring(struct minstrel_pri
+ 	mutex_unlock(&local->iflist_mtx);
+ 
+ 	/* TODO: can we omit this? it breaks output within upper loop */
+-	//spin_lock_bh(&mp->relay_lock);
+-	//relay_reset(mp->relay_ev);
+-	//spin_unlock_bh(&mp->relay_lock);
++	//spin_lock_bh(&local->orca.relay_lock);
++	//relay_reset(local->orca.relay_ev);
++	//spin_unlock_bh(&local->orca.relay_lock);
+ 
+ 	return ret;
+ }
+@@ -574,30 +650,10 @@ orca_reset_sample_table(struct minstrel_
+ 	mi->user_sample_txpower = -1;
+ }
+ 
+-/**
+- * orca_is_phy_tpc_ready - check if TPC can be used for a PHY
+- *
+- * TPC is ready if hardware/driver supports it and it is enabled in
+- * the driver.
+- */
+-static inline bool
+-orca_is_phy_tpc_ready(struct ieee80211_hw *hw)
+-{
+-	struct ieee80211_local *local = hw_to_local(hw);
+-
+-	return (ieee80211_hw_check(hw, SUPPORTS_TPC_PER_PACKET) ||
+-		ieee80211_hw_check(hw, SUPPORTS_TPC_PER_MRR)) &&
+-		/*
+-		 * this returns 1 for active, 0 for inactive and -1 for unsupported.
+-		 * because hw_flag is set, assume it is always active in driver.
+-		 */
+-	       local->ops->get_feature_state(hw, IEEE80211_FTRCTRL_TPC);
+-}
+-
+ static int
+-orca_phy_set_feature(struct minstrel_priv *mp, char *arg_str)
++orca_phy_set_feature(struct ieee80211_local *local, char *arg_str)
+ {
+-	struct ieee80211_local *local = hw_to_local(mp->hw);
++	struct ieee80211_hw *hw = &local->hw;
+ 	enum ieee80211_feature_ctrl feature = -1;
+ 	char *args[2];
+ 	int i, res;
+@@ -627,21 +683,21 @@ orca_phy_set_feature(struct minstrel_pri
+ 	else if (res)
+ 		return -EINVAL;
+ 
+-	if (!ieee80211_feature_ctrl_has(mp->hw, feature))
++	if (!ieee80211_feature_ctrl_has(hw, feature))
+ 		return -EPERM;
+ 
+-	res = local->ops->set_feature_state(mp->hw, feature, (s16)state);
++	res = local->ops->set_feature_state(hw, feature, (s16)state);
+ 	if (res)
+ 		return -EIO; /* TODO: more suitable error? */
+ 
+-	orca_print_cmd(mp, PHY_CMD_SET_FEATURE, args, 2, "");
++	orca_print_cmd(local, PHY_CMD_SET_FEATURE, args, 2, "");
+ 	return 0;
+ }
+ 
+ static int
+-orca_phy_get(struct minstrel_priv *mp, const char *args)
++orca_phy_get(struct ieee80211_local *local, const char *args)
+ {
+-	struct ieee80211_local *local = hw_to_local(mp->hw);
++	struct ieee80211_hw *hw = &local->hw;
+ 	char buf[64];
+ 	unsigned int len, size = 64;
+ 
+@@ -656,7 +712,7 @@ orca_phy_get(struct minstrel_priv *mp, c
+ 		if (!local->ops->get_txpower)
+ 			return -EOPNOTSUPP;
+ 
+-		local->ops->get_txpower(mp->hw, NULL, 0, &txpwr);
++		local->ops->get_txpower(hw, NULL, 0, &txpwr);
+ 		txpwr *= 2;
+ 
+ 		len += scnprintf(buf + len, size - len, "pwr-limit;%x", txpwr);
+@@ -665,7 +721,7 @@ orca_phy_get(struct minstrel_priv *mp, c
+ 	}
+ 
+ 	len += scnprintf(buf + len, size - len, "\n");
+-	orca_event_write(mp, buf, len);
++	orca_event_write(local, buf, len);
+ 
+ 	return 0;
+ }
+@@ -674,6 +730,7 @@ static int
+ orca_sta_set_rc_mode(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
+ 		     char **args, int n_args)
+ {
++	struct ieee80211_local *local = hw_to_local(mp->hw);
+ 	u16 update_freq, sample_freq;
+ 	int i;
+ 
+@@ -714,7 +771,7 @@ orca_sta_set_rc_mode(struct minstrel_pri
+ 		mi->sample_interval = HZ / sample_freq;
+ 	}
+ 
+-	orca_print_sta_cmd(mp, mi, STA_CMD_RC_MODE, args, n_args);
++	orca_print_sta_cmd(local, mi->sta, STA_CMD_RC_MODE, args, n_args);
+ 	return 0;
+ }
+ 
+@@ -722,15 +779,13 @@ static int
+ orca_sta_set_tpc_mode(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
+ 		      char *mode)
+ {
++	struct ieee80211_local *local = hw_to_local(mp->hw);
+ 	int i;
+ 
+-	if (!orca_is_phy_tpc_ready(mp->hw))
+-		return -EPERM;
+-
+ 	if (!mode)
+ 		return -EINVAL;
+-	if (!mi->ratetbl)
+-		return -EFAULT;
++	if (!orca_is_phy_tpc_ready(mp->hw))
++		return -EPERM;
+ 
+ 	if (!strcmp(mode, "manual"))
+ 		mi->tpc_manual = true;
+@@ -742,29 +797,29 @@ orca_sta_set_tpc_mode(struct minstrel_pr
+ 	for (i = 0; i < ARRAY_SIZE(mi->ratetbl->rate); i++)
+ 		mi->ratetbl->rate[i].txpower_idx = -1;
+ 
+-	orca_print_sta_cmd(mp, mi, STA_CMD_TPC_MODE, &mode, 1);
++	orca_print_sta_cmd(local, mi->sta, STA_CMD_TPC_MODE, &mode, 1);
+ 	return 0;
+ }
+ 
+-static struct minstrel_ht_sta *
+-orca_get_sta(struct minstrel_priv *mp, const u8 *macaddr)
++static struct sta_info *
++orca_get_sta(struct ieee80211_local *local, const u8 *macaddr)
+ {
+-	struct minstrel_ht_sta *mi;
++	struct sta_info *sta;
+ 
+ 	rcu_read_lock();
+-	list_for_each_entry_rcu(mi, &mp->stations, list) {
+-		if (!memcmp(mi->sta->addr, macaddr, ETH_ALEN))
++	list_for_each_entry_rcu(sta, &local->sta_list, list) {
++		if (!memcmp(sta->addr, macaddr, ETH_ALEN))
+ 			goto out;
+ 	}
+-	mi = NULL;
++	sta = NULL;
+ 
+ out:
+ 	rcu_read_unlock();
+-	return mi;
++	return sta;
+ }
+ 
+ static bool
+-orca_is_valid_rate(struct minstrel_ht_sta *mi, u32 rate)
++orca_is_valid_minstrel_rate(struct minstrel_ht_sta *mi, u32 rate)
+ {
+ 	int group, idx;
+ 
+@@ -778,14 +833,14 @@ orca_is_valid_rate(struct minstrel_ht_st
+ }
+ 
+ static int
+-orca_rate_from_str(struct minstrel_ht_sta *mi, const char *str)
++orca_minstrel_rate_from_str(struct minstrel_ht_sta *mi, const char *str)
+ {
+ 	unsigned int rate;
+ 
+ 	if (kstrtouint(str, 16, &rate))
+ 		return -EINVAL;
+ 
+-	if (!orca_is_valid_rate(mi, rate))
++	if (!orca_is_valid_minstrel_rate(mi, rate))
+ 		return -EINVAL;
+ 
+ 	return rate;
+@@ -795,6 +850,7 @@ static int
+ orca_set_probe(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
+ 	       char *arg_str)
+ {
++	struct ieee80211_local *local = hw_to_local(mp->hw);
+ 	struct sta_info *sta_info;
+ 	char tmp[16], *args[3];
+ 	unsigned int count;
+@@ -811,7 +867,7 @@ orca_set_probe(struct minstrel_priv *mp,
+ 	tmp[sizeof(tmp) - 1] = 0;
+ 	orca_get_args(args, ARRAY_SIZE(args), tmp, ",");
+ 
+-	rate = orca_rate_from_str(mi, args[0]);
++	rate = orca_minstrel_rate_from_str(mi, args[0]);
+ 	if (rate < 0)
+ 		return rate;
+ 
+@@ -837,7 +893,7 @@ orca_set_probe(struct minstrel_priv *mp,
+ 
+ 	sta_info = container_of(mi->sta, struct sta_info, sta);
+ 	if (sta_info->sdata->orca_monitor && ORCA_ECHO_TPRC)
+-		orca_print_sta_cmd(mp, mi, STA_CMD_PROBE, &arg_str, 1);
++		orca_print_sta_cmd(local, mi->sta, STA_CMD_PROBE, &arg_str, 1);
+ 
+ 	return 0;
+ }
+@@ -852,7 +908,7 @@ orca_ratetbl_set_rate_count(struct minst
+ 	if (!rate_str || !count_str)
+ 		return -EINVAL;
+ 
+-	rate = orca_rate_from_str(mi, rate_str);
++	rate = orca_minstrel_rate_from_str(mi, rate_str);
+ 	if (rate < 0)
+ 		return -EINVAL;
+ 
+@@ -889,6 +945,7 @@ static int
+ orca_set_ratetbl(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
+ 		 orca_cmd cmd, char **args, unsigned int n_args)
+ {
++	struct ieee80211_local *local = hw_to_local(mp->hw);
+ 	struct sta_info *sta_info;
+ 	char tmp[16], *stage[3];
+ 	int i, err = 0;
+@@ -946,7 +1003,7 @@ orca_set_ratetbl(struct minstrel_priv *m
+ 
+ 	sta_info = container_of(mi->sta, struct sta_info, sta);
+ 	if (sta_info->sdata->orca_monitor && ORCA_ECHO_TPRC)
+-		orca_print_sta_cmd(mp, mi, cmd, args, n_args);
++		orca_print_sta_cmd(local, mi->sta, cmd, args, n_args);
+ 
+ 	return err;
+ }
+@@ -966,7 +1023,8 @@ orca_sta_reset_rc_stats(struct minstrel_
+ 	memset(&mi->groups, 0, sizeof(mi->groups));
+ 
+ 	minstrel_ht_update_stats(mp, mi);
+-	orca_print_sta_cmd(mp, mi, STA_CMD_RESET_STATS, NULL, 0);
++	orca_print_sta_cmd(hw_to_local(mp->hw), mi->sta, STA_CMD_RESET_STATS,
++			   NULL, 0);
+ }
+ 
+ static int
+@@ -1004,8 +1062,10 @@ __orca_sta_cmd(struct minstrel_priv *mp,
+ }
+ 
+ static int
+-orca_sta_cmd(struct minstrel_priv *mp, orca_cmd cmd, char *arg_str)
++orca_sta_cmd(struct ieee80211_local *local, orca_cmd cmd, char *arg_str)
+ {
++	struct sta_info *sta;
++	struct minstrel_priv *mp;
+ 	struct minstrel_ht_sta *mi;
+ 	uint8_t macaddr[ETH_ALEN];
+ 	char *args[5];
+@@ -1015,13 +1075,21 @@ orca_sta_cmd(struct minstrel_priv *mp, o
+ 	if (!args[0])
+ 		return -EINVAL;
+ 
++	mp = local->rate_ctrl->priv;
++
+ 	if (!strcmp(args[0], "*")) {
+ 		switch (cmd) {
+ 		case STA_CMD_RC_MODE:
+ 		case STA_CMD_TPC_MODE:
+ 		case STA_CMD_RESET_STATS:
+ 			rcu_read_lock();
+-			list_for_each_entry_rcu(mi, &mp->stations, list) {
++			list_for_each_entry_rcu(sta, &local->sta_list, list) {
++				mi = sta->rate_ctrl_priv;
++				if (!mi) {
++					ret = -EFAULT;
++					break;
++				}
++
+ 				if ((ret = __orca_sta_cmd(mp, mi, cmd, &args[1], n_args - 1)))
+ 					break;
+ 			}
+@@ -1035,8 +1103,10 @@ orca_sta_cmd(struct minstrel_priv *mp, o
+ 		if (!mac_pton(args[0], macaddr))
+ 			return -EINVAL;
+ 
+-		mi = orca_get_sta(mp, macaddr);
+-		if (!mi)
++		sta = orca_get_sta(local, macaddr);
++		if (sta && sta->rate_ctrl_priv)
++			mi = sta->rate_ctrl_priv;
++		if (!sta || !mi)
+ 			return -ENOENT;
+ 
+ 		ret = __orca_sta_cmd(mp, mi, cmd, &args[1], n_args - 1);
+@@ -1045,13 +1115,13 @@ orca_sta_cmd(struct minstrel_priv *mp, o
+ }
+ 
+ static int
+-orca_process_cmd(struct minstrel_priv *mp, orca_cmd cmd, char *args)
++orca_process_cmd(struct ieee80211_local *local, orca_cmd cmd, char *args)
+ {
+ 	int err = 0;
+ 
+ 	switch (cmd) {
+ 	case API_CMD_LOG:
+-		orca_print_cmd(mp, cmd, &args, 1, "");
++		orca_print_cmd(local, cmd, &args, 1, "");
+ 		break;
+ 	case STA_CMD_RC:
+ 	case STA_CMD_TPC:
+@@ -1060,25 +1130,25 @@ orca_process_cmd(struct minstrel_priv *m
+ 	case STA_CMD_RC_MODE:
+ 	case STA_CMD_TPC_MODE:
+ 	case STA_CMD_RESET_STATS:
+-		err = orca_sta_cmd(mp, cmd, args);
++		err = orca_sta_cmd(local, cmd, args);
+ 		break;
+ 	case PHY_CMD_START:
+-		err = orca_start_monitoring(mp, args);
++		err = orca_start_monitoring(local, args);
+ 		break;
+ 	case PHY_CMD_STOP:
+-		err = orca_stop_monitoring(mp, args);
++		err = orca_stop_monitoring(local, args);
+ 		break;
+ 	case PHY_CMD_DUMP:
+-		orca_dump_stations(mp, "dump");
++		orca_dump_stations(local, "dump");
+ 		break;
+ 	case PHY_CMD_DUMP_FEATURES:
+-		orca_dump_features(mp);
++		orca_dump_features(local);
+ 		break;
+ 	case PHY_CMD_GET:
+-		err = orca_phy_get(mp, args);
++		err = orca_phy_get(local, args);
+ 		break;
+ 	case PHY_CMD_SET_FEATURE:
+-		err = orca_phy_set_feature(mp, args);
++		err = orca_phy_set_feature(local, args);
+ 		break;
+ 	default:
+ 		err = -EINVAL;
+@@ -1091,7 +1161,7 @@ static ssize_t
+ orca_control_write(struct file *file, const char __user *userbuf, size_t count,
+ 		   loff_t *ppos)
+ {
+-	struct minstrel_priv *mp = file->private_data;
++	struct ieee80211_local *local = file->private_data;
+ 	char buf[96], *pos, *cur;
+ 	size_t len = count;
+ 	int cmd = -1, i, err;
+@@ -1118,7 +1188,10 @@ orca_control_write(struct file *file, co
+ 	if (cmd == -1)
+ 		return -EINVAL;
+ 
+-	err = orca_process_cmd(mp, cmd, pos);
++	if (CMD_NEEDS_MINSTREL(cmd) && !orca_phy_uses_minstrel(local))
++		return -EOPNOTSUPP;
++
++	err = orca_process_cmd(local, cmd, pos);
+ 	if (err)
+ 		return err;
+ 
+@@ -1131,114 +1204,177 @@ static const struct file_operations fops
+ 	.write = orca_control_write,
+ };
+ 
+-void orca_sta_update(struct minstrel_priv *mp, struct minstrel_ht_sta *mi)
++void orca_sta_init(struct ieee80211_local *local, struct sta_info *sta, gfp_t gfp)
+ {
+-	bool add = list_empty(&mi->list);
++	struct minstrel_ht_sta *mi;
+ 
++	spin_lock_init(&sta->orca.lock);
++
++	/* this will be set by orca_sta_update when the station was really added
++	 * to mac80211's list. It is currently only used to avoid printing
++	 * sta;remove lines when there wasn't an sta;add line before.
++	 */
++	sta->orca.added = false;
++
++	/* Only allocate the rate table when Minstrel is used, without we cannot
++	 * use our RC functions anyway */
++	if (orca_phy_uses_minstrel(local)) {
++		int i;
++
++		mi = sta->rate_ctrl_priv;
++		mi->ratetbl = kzalloc(sizeof(*mi->ratetbl), gfp);
++		for (i = 0; i < ARRAY_SIZE(mi->ratetbl->rate); i++)
++			mi->ratetbl->rate[i].txpower_idx = -1;
++	}
++}
++
++void orca_sta_update(struct ieee80211_local *local, struct sta_info *sta, bool add)
++{
+ 	if (add) {
+-		spin_lock_bh(&mp->sta_wlock);
+-		list_add_rcu(&mi->list, &mp->stations);
+-		spin_unlock_bh(&mp->sta_wlock);
++		sta->orca.added = true;
+ 	}
+ 
+-	spin_lock_bh(&mp->relay_lock);
+-	orca_dump_sta(mp, mi, add ? "add" : "update");
+-	spin_unlock_bh(&mp->relay_lock);
++	spin_lock_bh(&local->orca.relay_lock);
++	orca_dump_sta(local, sta, add ? "add" : "update");
++	spin_unlock_bh(&local->orca.relay_lock);
+ }
+ 
+-void orca_sta_remove(struct minstrel_priv *mp, struct minstrel_ht_sta *mi)
++void orca_sta_remove(struct ieee80211_local *local, struct sta_info *sta)
+ {
+-	struct ieee80211_sta_rates *ratetbl = mi->ratetbl;
++	struct ieee80211_sta_rates *ratetbl;
++	struct minstrel_ht_sta *mi;
+ 	char info[64];
+ 	int ofs = 0;
+ 
+-	spin_lock_bh(&mp->sta_wlock);
++	if (orca_phy_uses_minstrel(local)) {
++		mi = sta->rate_ctrl_priv;
+ 
+-	list_del_rcu(&mi->list);
+-	INIT_LIST_HEAD_RCU(&mi->list);
++		spin_lock(&mi->lock);
+ 
+-	spin_lock(&mi->lock);
++		ratetbl = mi->ratetbl;
++		mi->ratetbl = NULL;
++		kfree(ratetbl);
+ 
+-	mi->ratetbl = NULL;
+-	kfree(ratetbl);
++		spin_unlock(&mi->lock);
++	}
+ 
+-	spin_unlock(&mi->lock);
+-	spin_unlock_bh(&mp->sta_wlock);
++	if (!sta->orca.added)
++		return;
+ 
+ 	ofs = scnprintf(info, sizeof(info), "%llx;sta;remove;%pM;;;\n",
+ 			(unsigned long long)ktime_get_real_fast_ns(),
+-			mi->sta->addr);
++			sta->addr);
+ 
+-	spin_lock_bh(&mp->relay_lock);
++	spin_lock_bh(&local->orca.relay_lock);
+ 
+-	relay_write(mp->relay_ev, info, ofs);
+-	relay_flush(mp->relay_ev);
++	relay_write(local->orca.relay_ev, info, ofs);
++	relay_flush(local->orca.relay_ev);
+ 
+-	spin_unlock_bh(&mp->relay_lock);
++	spin_unlock_bh(&local->orca.relay_lock);
+ }
+ 
+-void __orca_report_tx_status(struct minstrel_priv *mp,
+-			     struct minstrel_ht_sta *mi,
+-			     struct ieee80211_tx_info *info,
+-			     u16 *rate_list, s16 *txpwr_list, int n_rates)
++void __orca_report_tx_status(struct ieee80211_local *local, struct sta_info *sta,
++			     struct ieee80211_tx_status *txs)
+ {
+-	char txs[64 + IEEE80211_TX_MAX_RATES * 14];
+-	int ofs = 0;
+-	int i;
++	struct ieee80211_tx_info *info = txs->info;
++	struct minstrel_priv *mp;
++	struct minstrel_ht_sta *mi;
++	struct rate_info ri;
++	char out[64 + IEEE80211_TX_MAX_RATES * 14];
++	int i, ofs = 0;
++	u32 rate;
++	bool minstrel_used = orca_phy_uses_minstrel(local);
+ 
+-	if (!n_rates)
+-		return;
++	if (minstrel_used) {
++		mp = local->rate_ctrl->priv;
++		if (sta)
++			mi = sta->rate_ctrl_priv;
++	}
+ 
+-	ofs += scnprintf(txs, sizeof(txs), "%llx;txs;%pM;%x;%x;%x",
++	ofs += scnprintf(out, sizeof(out), "%llx;txs;%pM;%x;%x;%x",
+ 			 (unsigned long long)ktime_get_real_fast_ns(),
+-			 mi->sta->addr,
++			 sta ? sta->addr : NULL,
+ 			 info->status.ampdu_len,
+ 			 info->status.ampdu_ack_len,
+ 			 !!(info->flags & IEEE80211_TX_CTL_RATE_CTRL_PROBE));
+ 
+-	for (i = 0; i < n_rates; i++) {
+-		ofs += scnprintf(txs + ofs, sizeof(txs) - ofs, ";%x,%x,",
+-				 rate_list[i], info->status.rates[i].count);
+-		if (txpwr_list[i] < 0)
+-			continue;
++	if (txs->rates && txs->n_rates) {
++		for (i = 0; i < txs->n_rates; i++) {
++			struct ieee80211_rate_status *rs = &txs->rates[i];
++
++			if (minstrel_used)
++				rate = minstrel_ht_ri_to_minstrel(mp, mi,
++								  &rs->rate_idx);
++			else
++				rate = orca_encode_rate(&rs->rate_idx);
+ 
+-		ofs += scnprintf(txs + ofs, sizeof(txs) - ofs, "%x",
+-				 (u16)(txpwr_list[i]));
+-	}
++			ofs += scnprintf(out + ofs, sizeof(out) - ofs,
++					 ";%x,%x,", rate, rs->try_count);
++
++			if (rs->txpower_idx >= 0)
++				ofs += scnprintf(out + ofs, sizeof(out) - ofs,
++						 "%x", rs->txpower_idx);
++		}
++	} else if (info->status.rates[0].idx >= 0 && info->status.rates[0].count > 0) {
++		for (i = 0; i < IEEE80211_TX_MAX_RATES &&
++			    info->status.rates[i].idx >= 0 &&
++			    info->status.rates[i].count > 0; i++)
++		{
++			if (minstrel_used) {
++				rate = minstrel_ht_txrate_to_minstrel(
++					mp, mi, &info->status.rates[i]
++				);
++			} else {
++				ieee80211_txrate_get_rate_info(
++					&info->status.rates[i], local->hw.wiphy,
++					info->band, &ri
++				);
++				rate = orca_encode_rate(&ri);
++			}
+ 
+-	for (; i < IEEE80211_TX_MAX_RATES; i++) {
+-		ofs += scnprintf(txs + ofs, sizeof(txs) - ofs, ";,,");
++			ofs += scnprintf(out + ofs, sizeof(out) - ofs, ";%x,%x,",
++					 rate, info->status.rates[i].count);
++		}
+ 	}
+-	ofs += scnprintf(txs + ofs, sizeof(txs) - ofs, "\n");
+ 
+-	orca_event_write(mp, txs, ofs);
++	for (; i < IEEE80211_TX_MAX_RATES; i++)
++		ofs += scnprintf(out + ofs, sizeof(out - ofs), ";,,");
++
++	ofs += scnprintf(out + ofs, sizeof(out) - ofs, "\n");
++
++	orca_event_write(local, out, ofs);
+ }
+ 
+-void __orca_report_rx_status(struct minstrel_priv *mp, u8 *addr, s8 last_signal,
+-			     u8 chain_status, s8 *chain_signal)
++void __orca_report_rx_status(struct ieee80211_local *local, struct ieee80211_sta *sta,
++			     struct ieee80211_rx_status *rxs)
+ {
+-	char rxs[64 + IEEE80211_MAX_CHAINS * 8];
+-	int ofs = 0;
+-	int i;
++	char out[64 + IEEE80211_MAX_CHAINS * 8];
++	int i, ofs = 0;
++	s8 last_signal = !(rxs->flag & RX_FLAG_NO_SIGNAL_VAL) ? rxs->signal : -1;
++
++	if (!sta)
++		return;
+ 
+ 	/* Cast signal to u8 to avoid having ffffff for negative values */
+-	ofs += scnprintf(rxs, sizeof(rxs), "%llx;rxs;%pM;%x",
++	ofs += scnprintf(out, sizeof(out), "%llx;rxs;%pM;%x",
+ 			 (unsigned long long)ktime_get_real_fast_ns(),
+-			 addr, (u8)last_signal);
++			 sta->addr, (u8)last_signal);
+ 
+ 	for (i = 0; i < IEEE80211_MAX_CHAINS; i++) {
+-		ofs += scnprintf(rxs + ofs, sizeof(rxs) - ofs, ";%x",
+-			 	(chain_status & BIT(i) ? (u8)chain_signal[i] : 0x7f));
++		ofs += scnprintf(out + ofs, sizeof(out) - ofs, ";%x",
++			 	(rxs->chains & BIT(i) ? (u8)rxs->chain_signal[i]
++				 			: 0x7f));
+ 	}
+-	ofs += scnprintf(rxs + ofs, sizeof(rxs) - ofs, "\n");
++	ofs += scnprintf(out + ofs, sizeof(out) - ofs, "\n");
+ 
+-	orca_event_write(mp, rxs, ofs);
++	orca_event_write(local, out, ofs);
+ }
+ 
+ void __orca_report_rate_update(struct minstrel_priv *mp,
+ 			       struct minstrel_ht_sta *mi, u16 rate,
+ 			       struct minstrel_rate_stats *mrs)
+ {
++	struct ieee80211_local *local = hw_to_local(mp->hw);
+ 	char stat[100];
+ 	int ofs;
+ 	int tp;
+@@ -1255,12 +1391,13 @@ void __orca_report_rate_update(struct mi
+ 			mrs->last_attempts,
+ 			mrs->succ_hist, mrs->att_hist);
+ 
+-	orca_event_write(mp, stat, ofs);
++	orca_event_write(local, stat, ofs);
+ }
+ 
+ void __orca_report_best_rates(struct minstrel_priv *mp,
+ 			      struct minstrel_ht_sta *mi)
+ {
++	struct ieee80211_local *local = hw_to_local(mp->hw);
+ 	char line[128];
+ 	int i, ofs;
+ 
+@@ -1273,12 +1410,13 @@ void __orca_report_best_rates(struct min
+ 	}
+ 	ofs += scnprintf(line + ofs, sizeof(line), ";%x\n", mi->max_prob_rate);
+ 
+-	orca_event_write(mp, line, ofs);
++	orca_event_write(local, line, ofs);
+ }
+ 
+ void __orca_report_estimated_throughput(struct minstrel_priv *mp,
+ 					struct minstrel_ht_sta *mi)
+ {
++	struct ieee80211_local *local = hw_to_local(mp->hw);
+ 	struct minstrel_rate_stats *mrs;
+ 	char line[128];
+ 	int group, idx, tp, ofs;
+@@ -1292,12 +1430,13 @@ void __orca_report_estimated_throughput(
+ 			(unsigned long long)ktime_get_real_fast_ns(),
+ 			mi->sta->addr, tp);
+ 
+-	orca_event_write(mp, line, ofs);
++	orca_event_write(local, line, ofs);
+ }
+ 
+ void __orca_report_sample_rates(struct minstrel_priv *mp,
+ 				struct minstrel_ht_sta *mi)
+ {
++	struct ieee80211_local *local = hw_to_local(mp->hw);
+ 	char line[128];
+ 	int i, j, ofs;
+ 
+@@ -1313,7 +1452,7 @@ void __orca_report_sample_rates(struct m
+ 	}
+ 	ofs += scnprintf(line + ofs, sizeof(line), "\n");
+ 
+-	orca_event_write(mp, line, ofs);
++	orca_event_write(local, line, ofs);
+ }
+ 
+ static struct dentry *
+@@ -1345,32 +1484,35 @@ static struct rchan_callbacks relay_ev_c
+ 	.remove_buf_file = remove_buf_file_cb,
+ };
+ 
+-void orca_add_debugfs_api(struct ieee80211_hw *hw, void *priv, struct dentry *dir)
++void orca_add_debugfs_api(struct ieee80211_local *local)
+ {
+-	struct minstrel_priv *mp = priv;
++	struct dentry *dir;
+ 
+ 	BUILD_BUG_ON(ARRAY_SIZE(feature_pretty) != NUM_IEEE80211_FTRCTRL);
+ 
+-	spin_lock_init(&mp->relay_lock);
+-	spin_lock_init(&mp->sta_wlock);
++	dir = debugfs_create_dir("orca", local->hw.wiphy->debugfsdir);
++	if (IS_ERR(dir))
++		return;
++
++	spin_lock_init(&local->orca.relay_lock);
+ 
+-	INIT_LIST_HEAD_RCU(&mp->stations);
+-	mp->relay_ev = relay_open("api_event", dir, 256, 512, &relay_ev_cb,
+-				  NULL);
+-	debugfs_create_devm_seqfile(&hw->wiphy->dev, "api_info",
++	local->orca.debugfsdir = dir;
++	local->orca.relay_ev = relay_open("api_event", dir, 256, 512,
++					  &relay_ev_cb, NULL);
++	debugfs_create_devm_seqfile(&local->hw.wiphy->dev, "api_info",
+ 				    dir, orca_read_api_info);
+-	debugfs_create_devm_seqfile(&hw->wiphy->dev, "api_phy",
++	debugfs_create_devm_seqfile(&local->hw.wiphy->dev, "api_phy",
+ 				    dir, orca_read_phy_info);
+-	debugfs_create_file("api_control", 0200, dir, mp, &fops_control);
++	debugfs_create_file("api_control", 0200, dir, local, &fops_control);
+ }
+ 
+-void orca_remove_debugfs_api(void *priv)
++void orca_remove_debugfs_api(struct ieee80211_local *local)
+ {
+-	struct minstrel_priv *mp = priv;
++	spin_lock_bh(&local->orca.relay_lock);
++	if (local->orca.relay_ev)
++		relay_close(local->orca.relay_ev);
+ 
+-	spin_lock_bh(&mp->relay_lock);
+-	if (mp->relay_ev)
+-		relay_close(mp->relay_ev);
++	spin_unlock_bh(&local->orca.relay_lock);
+ 
+-	spin_unlock_bh(&mp->relay_lock);
++	debugfs_remove(local->orca.debugfsdir);
+ }
+--- /dev/null
++++ b/net/mac80211/orca_uapi.h
+@@ -0,0 +1,215 @@
++#ifndef ORCA_UAPI_H
++#define ORCA_UAPI_H
++
++#include "ieee80211_i.h"
++#include "rc80211_minstrel_ht.h"
++
++#define ORCA_MONITOR_TXS                BIT(0)
++#define ORCA_MONITOR_RXS                BIT(1)
++#define ORCA_MONITOR_STATS              BIT(2)
++#define ORCA_ECHO_TPRC                  BIT(7)
++
++// ----- DEFINITIONS FOR OUR OWN RATE ENCODING --------------------------------
++
++enum orca_rate_kind {
++	ORCA_RATE_LEGACY = 0,
++	ORCA_RATE_HT,
++	ORCA_RATE_VHT,
++	ORCA_RATE_HE,
++	ORCA_RATE_EHT,
++	ORCA_RATE_DMG,
++	ORCA_RATE_EDMG,
++	ORCA_RATE_EXT_SC_DMG,
++	ORCA_RATE_S1G,
++};
++
++enum orca_rate_gi {
++	ORCA_RATE_GI_0_8 = 0,		/* aka LGI */
++	ORCA_RATE_GI_0_4,		/* aka SGI */
++	ORCA_RATE_GI_1_6,
++	ORCA_RATE_GI_3_2,
++};
++
++#define ORCA_RATE_KIND			GENMASK(3, 0)
++#define ORCA_RATE_BITRATE		GENMASK(13, 4)
++#define ORCA_RATE_MCS			GENMASK(8, 4)
++#define ORCA_RATE_NSS			GENMASK(13, 9)
++#define ORCA_RATE_BW			GENMASK(17, 14)
++#define ORCA_RATE_GI			GENMASK(20, 18)
++#define ORCA_RATE_RU_ALLOC		GENMASK(25, 21)
++#define ORCA_RATE_HE_DCM		GENMASK(27, 26)
++#define ORCA_RATE_EDMG_BOND_CH		GENMASK(29, 28)
++
++u32 orca_encode_rate(struct rate_info *ri);
++
++// ----- SOME HELPER FUNCTIONS ------------------------------------------------
++
++/**
++ * orca_phy_uses_minstrel - check if we can use minstrel-specific stuff
++ *
++ * In case a PHY doesn't use minstrel we only support some basic
++ * functionality.
++ */
++static inline bool
++orca_phy_uses_minstrel(struct ieee80211_local *local) {
++	return (!ieee80211_hw_check(&local->hw, HAS_RATE_CONTROL) &&
++		local->rate_ctrl &&
++		!strcmp(local->rate_ctrl->ops->name, "minstrel_ht") &&
++		local->rate_ctrl->priv);
++}
++
++/**
++ * orca_is_phy_tpc_ready - check if TPC can be used for a PHY
++ *
++ * TPC is ready if hardware/driver supports it and it is enabled in
++ * the driver.
++ */
++static inline bool
++orca_is_phy_tpc_ready(struct ieee80211_hw *hw)
++{
++	struct ieee80211_local *local = hw_to_local(hw);
++
++	return (ieee80211_hw_check(hw, SUPPORTS_TPC_PER_PACKET) ||
++		ieee80211_hw_check(hw, SUPPORTS_TPC_PER_MRR)) &&
++		/*
++		 * this returns 1 for active, 0 for inactive and -1 for unsupported.
++		 * because hw_flag is set, assume it is always active in driver.
++		 */
++		local->ops->get_feature_state(hw, IEEE80211_FTRCTRL_TPC);
++}
++
++// ----------------------------------------------
++
++#ifdef CPTCFG_MAC80211_ORCA_UAPI
++
++void orca_add_debugfs_api(struct ieee80211_local *local);
++void orca_remove_debugfs_api(struct ieee80211_local *local);
++void orca_sta_init(struct ieee80211_local *local, struct sta_info *sta, gfp_t gfp);
++void orca_sta_update(struct ieee80211_local *local, struct sta_info *sta,
++		     bool add);
++void orca_sta_remove(struct ieee80211_local *local, struct sta_info *sta);
++
++/* TXS and RXS are available for all mac80211-based drivers */
++void __orca_report_tx_status(struct ieee80211_local *local, struct sta_info *sta,
++			     struct ieee80211_tx_status *txs);
++void __orca_report_rx_status(struct ieee80211_local *local, struct ieee80211_sta *sta,
++			     struct ieee80211_rx_status *rxs);
++
++/* Those reportings are only available for PHYs using Minstrel RC */
++void __orca_report_rate_update(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
++			       u16 rate, struct minstrel_rate_stats *mrs);
++void __orca_report_best_rates(struct minstrel_priv *mp, struct minstrel_ht_sta *mi);
++void __orca_report_estimated_throughput(struct minstrel_priv *mp,
++					struct minstrel_ht_sta *mi);
++void __orca_report_sample_rates(struct minstrel_priv *mp, struct minstrel_ht_sta *mi);
++
++#else
++
++static inline void orca_add_debugfs_api(struct ieee80211_local *local) { }
++static inline void orca_remove_debugfs_api(struct ieee80211_local *local) { }
++static inline void orca_sta_init(struct ieee80211_local *local, struct sta_info *sta) { }
++static inline void orca_sta_update(struct ieee80211_local *local, struct sta_info *sta,
++				   bool add) { }
++static inline void orca_sta_remove(struct ieee80211_local *local, struct sta_info *sta) { }
++
++#endif
++
++static inline void
++orca_report_tx_status(struct ieee80211_local *local, struct sta_info *sta,
++		      struct ieee80211_tx_status *txs)
++{
++#ifdef CPTCFG_MAC80211_ORCA_UAPI
++	if (!(local->orca.monitor & ORCA_MONITOR_TXS))
++		return;
++
++	__orca_report_tx_status(local, sta, txs);
++#endif
++}
++
++static inline void
++orca_report_rx_status(struct ieee80211_local *local, struct ieee80211_sta *sta,
++		      struct ieee80211_rx_status *rxs)
++{
++#ifdef CPTCFG_MAC80211_ORCA_UAPI
++	if (!(local->orca.monitor & ORCA_MONITOR_RXS))
++		return;
++
++	__orca_report_rx_status(local, sta, rxs);
++#endif
++}
++
++static inline void
++orca_report_rate_update(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
++			u16 rate, struct minstrel_rate_stats *mrs)
++{
++#ifdef CPTCFG_MAC80211_ORCA_UAPI
++	struct ieee80211_local *local = hw_to_local(mp->hw);
++
++	if (!(local->orca.monitor & ORCA_MONITOR_STATS))
++		return;
++
++	__orca_report_rate_update(mp, mi, rate, mrs);
++#endif
++}
++
++static inline void
++orca_report_best_rates(struct minstrel_priv *mp, struct minstrel_ht_sta *mi)
++{
++#ifdef CPTCFG_MAC80211_ORCA_UAPI
++	struct ieee80211_local *local = hw_to_local(mp->hw);
++
++	if (!(local->orca.monitor & ORCA_MONITOR_STATS))
++		return;
++
++	__orca_report_best_rates(mp, mi);
++#endif
++}
++
++static inline void
++orca_report_estimated_throughput(struct minstrel_priv *mp,
++				 struct minstrel_ht_sta *mi)
++{
++#ifdef CPTCFG_MAC80211_ORCA_UAPI
++	struct sta_info *sta_info = container_of(mi->sta, struct sta_info, sta);
++
++	if (!(sta_info->sdata->orca_monitor & ORCA_MONITOR_STATS))
++		return;
++
++	__orca_report_estimated_throughput(mp, mi);
++#endif
++}
++
++static inline void
++orca_report_sample_rates(struct minstrel_priv *mp, struct minstrel_ht_sta *mi)
++{
++#ifdef CPTCFG_MAC80211_ORCA_UAPI
++	struct ieee80211_local *local = hw_to_local(mp->hw);
++
++	if (!(local->orca.monitor & ORCA_MONITOR_STATS))
++		return;
++
++	__orca_report_sample_rates(mp, mi);
++#endif
++}
++
++static inline bool
++orca_sta_rc_manual_mode(struct minstrel_ht_sta *mi)
++{
++#ifdef CPTCFG_MAC80211_ORCA_UAPI
++	return mi->rc_manual;
++#else
++	return false;
++#endif
++}
++
++static inline bool
++orca_sta_tpc_manual_mode(struct minstrel_ht_sta *mi)
++{
++#ifdef CPTCFG_MAC80211_ORCA_UAPI
++	return mi->tpc_manual;
++#else
++	return false;
++#endif
++}
++
++#endif
+--- a/net/mac80211/rx.c
++++ b/net/mac80211/rx.c
+@@ -33,7 +33,7 @@
+ #include "tkip.h"
+ #include "wme.h"
+ #include "rate.h"
+-#include "rc80211_minstrel_ht.h"
++#include "orca_uapi.h"
+ 
+ /*
+  * monitor mode reception
+@@ -5386,13 +5386,7 @@ void ieee80211_rx_list(struct ieee80211_
+ 			ieee80211_is_data_present(hdr->frame_control))
+ 			ieee80211_tpt_led_trig_rx(local, skb->len);
+ 
+-		if (pubsta && local->rate_ctrl) {
+-			struct sta_info *sta = container_of(pubsta, struct sta_info, sta);
+-
+-			if (test_sta_flag(sta, WLAN_STA_RATE_CONTROL)) {
+-				orca_report_rx_status(local->rate_ctrl->priv, sta, status);
+-			}
+-		}
++		orca_report_rx_status(local, pubsta, status);
+ 
+ 		if (status->flag & RX_FLAG_8023)
+ 			__ieee80211_rx_handle_8023(hw, pubsta, skb, list);
+--- a/net/mac80211/status.c
++++ b/net/mac80211/status.c
+@@ -17,7 +17,7 @@
+ #include "mesh.h"
+ #include "led.h"
+ #include "wme.h"
+-
++#include "orca_uapi.h"
+ 
+ void ieee80211_tx_status_irqsafe(struct ieee80211_hw *hw,
+ 				 struct sk_buff *skb)
+@@ -1211,6 +1211,7 @@ void ieee80211_tx_status_ext(struct ieee
+ 		}
+ 
+ 		rate_control_tx_status(local, status);
++		orca_report_tx_status(local, sta, status);
+ 		if (ieee80211_vif_is_mesh(&sta->sdata->vif))
+ 			ieee80211s_update_metric(local, sta, status);
+ 	}
+--- a/net/mac80211/main.c
++++ b/net/mac80211/main.c
+@@ -33,6 +33,7 @@
+ #include "wep.h"
+ #include "led.h"
+ #include "debugfs.h"
++#include "orca_uapi.h"
+ 
+ void ieee80211_configure_filter(struct ieee80211_local *local)
+ {
+@@ -1598,6 +1599,7 @@ int ieee80211_register_hw(struct ieee802
+ 
+ 	debugfs_hw_add(local);
+ 	rate_control_add_debugfs(local);
++	orca_add_debugfs_api(local);
+ 
+ 	ieee80211_check_wbrf_support(local);
+ 
+@@ -1684,6 +1686,7 @@ void ieee80211_unregister_hw(struct ieee
+ 
+ 	ieee80211_clear_tx_pending(local);
+ 	rate_control_deinitialize(local);
++	orca_remove_debugfs_api(local);
+ 
+ 	if (skb_queue_len(&local->skb_queue) ||
+ 	    skb_queue_len(&local->skb_queue_unreliable))
+--- a/net/mac80211/rc80211_minstrel_ht.c
++++ b/net/mac80211/rc80211_minstrel_ht.c
+@@ -15,6 +15,7 @@
+ #include "rate.h"
+ #include "sta_info.h"
+ #include "rc80211_minstrel_ht.h"
++#include "orca_uapi.h"
+ 
+ #define AVG_AMPDU_SIZE	16
+ #define AVG_PKT_SIZE	1200
+@@ -363,9 +364,13 @@ minstrel_vht_ri_get_group_idx(struct rat
+ 			     2*!!(rate->bw & RATE_INFO_BW_80));
+ }
+ 
+-static struct minstrel_rate_stats *
+-minstrel_ht_get_stats(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
+-		      struct ieee80211_tx_rate *rate, u16 *dest_idx)
++/*
++ * Convert a struct ieee80211_tx_rate to the Minstrel rate scheme.
++ */
++u16
++minstrel_ht_txrate_to_minstrel(struct minstrel_priv *mp,
++			       struct minstrel_ht_sta *mi,
++		      	       struct ieee80211_tx_rate *rate)
+ {
+ 	int group, idx;
+ 
+@@ -403,20 +408,24 @@ minstrel_ht_get_stats(struct minstrel_pr
+ 
+ 	idx = 0;
+ out:
+-	*dest_idx = MI_RATE(group, idx);
+-	return &mi->groups[group].rates[idx];
++	return MI_RATE(group, idx);
+ }
+ 
+-/*
+- * Get the minstrel rate statistics for specified STA and rate info.
+- */
+ static struct minstrel_rate_stats *
+-minstrel_ht_ri_get_stats(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
+-			 struct ieee80211_rate_status *rate_status,
+-			 u16 *dest_idx)
++minstrel_ht_get_stats(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
++		      struct ieee80211_tx_rate *rate)
++{
++	int mi_rate;
++
++	mi_rate = minstrel_ht_txrate_to_minstrel(mp, mi, rate);
++	return &mi->groups[MI_RATE_GROUP(mi_rate)].rates[MI_RATE_IDX(mi_rate)];
++}
++
++u16
++minstrel_ht_ri_to_minstrel(struct minstrel_priv *mp,
++			   struct minstrel_ht_sta *mi, struct rate_info *rate)
+ {
+ 	int group, idx, rate_idx;
+-	struct rate_info *rate = &rate_status->rate_idx;
+ 	struct ieee80211_supported_band *sband;
+ 
+ 	if (rate->flags & RATE_INFO_FLAGS_MCS) {
+@@ -453,8 +462,20 @@ minstrel_ht_ri_get_stats(struct minstrel
+ 
+ 	idx = 0;
+ out:
+-	*dest_idx = MI_RATE(group, idx);
+-	return &mi->groups[group].rates[idx];
++	return MI_RATE(group, idx);
++}
++
++/*
++ * Get the minstrel rate statistics for specified STA and rate info.
++ */
++static struct minstrel_rate_stats *
++minstrel_ht_ri_get_stats(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
++			 struct ieee80211_rate_status *rs)
++{
++	int mi_rate;
++
++	mi_rate = minstrel_ht_ri_to_minstrel(mp, mi, &rs->rate_idx);
++	return &mi->groups[MI_RATE_GROUP(mi_rate)].rates[MI_RATE_IDX(mi_rate)];
+ }
+ 
+ static inline struct minstrel_rate_stats *
+@@ -1270,8 +1291,6 @@ minstrel_ht_tx_status(void *priv, struct
+ 	struct minstrel_priv *mp = priv;
+ 	u32 update_interval = MINSTREL_UPDATE_INTERVAL;
+ 	bool last, update = false;
+-	u16 rate_list[IEEE80211_TX_MAX_RATES] = {};
+-	s16 txpwr_list[IEEE80211_TX_MAX_RATES] = {};
+ 	int i;
+ 
+ 	/* Ignore packet that was sent with noAck flag */
+@@ -1316,15 +1335,13 @@ minstrel_ht_tx_status(void *priv, struct
+ 							&(st->rates[i + 1]));
+ 
+ 			rate = minstrel_ht_ri_get_stats(mp, mi,
+-							&(st->rates[i]),
+-							&rate_list[i]);
++							&(st->rates[i]));
+ 
+ 			if (last)
+ 				rate->success += info->status.ampdu_ack_len;
+ 
+ 			rate->attempts += st->rates[i].try_count *
+ 					  info->status.ampdu_len;
+-			txpwr_list[i] = st->rates[i].txpower_idx;
+ 		}
+ 	} else {
+ 		last = !minstrel_ht_txstat_valid(mp, mi, &ar[0]);
+@@ -1332,18 +1349,15 @@ minstrel_ht_tx_status(void *priv, struct
+ 			last = (i == IEEE80211_TX_MAX_RATES - 1) ||
+ 				!minstrel_ht_txstat_valid(mp, mi, &ar[i + 1]);
+ 
+-			rate = minstrel_ht_get_stats(mp, mi, &ar[i], &rate_list[i]);
++			rate = minstrel_ht_get_stats(mp, mi, &ar[i]);
+ 
+ 			if (last)
+ 				rate->success += info->status.ampdu_ack_len;
+ 
+ 			rate->attempts += ar[i].count * info->status.ampdu_len;
+-			txpwr_list[i] = -1;
+ 		}
+ 	}
+ 
+-	orca_report_tx_status(mp, mi, info, rate_list, txpwr_list, i);
+-
+ 	if (mp->hw->max_rates > 1) {
+ 		/*
+ 		 * check for sudden death of spatial multiplexing,
+@@ -1869,8 +1883,6 @@ minstrel_ht_update_caps(void *priv, stru
+ 	minstrel_ht_update_stats(mp, mi);
+ 	minstrel_ht_update_rates(mp, mi, true);
+ 
+-	orca_sta_update(mp, mi);
+-
+ 	spin_unlock_bh(&mi->lock);
+ }
+ 
+@@ -1914,11 +1926,6 @@ minstrel_ht_alloc_sta(void *priv, struct
+ 	mi->update_interval = MINSTREL_UPDATE_INTERVAL;
+ 	mi->sample_interval = MINSTREL_SAMPLE_INTERVAL;
+ 
+-	INIT_LIST_HEAD(&mi->list);
+-	mi->ratetbl = kzalloc(sizeof(*mi->ratetbl), gfp);
+-	for (i = 0; i < ARRAY_SIZE(mi->ratetbl->rate); i++)
+-		mi->ratetbl->rate[i].txpower_idx = -1;
+-
+ 	mi->user_sample_rate = -1;
+ 	mi->user_sample_count = 0;
+ 	mi->user_sample_txpower = -1;
+@@ -1930,7 +1937,6 @@ minstrel_ht_alloc_sta(void *priv, struct
+ static void
+ minstrel_ht_free_sta(void *priv, struct ieee80211_sta *sta, void *priv_sta)
+ {
+-	orca_sta_remove(priv, priv_sta);
+ 	kfree(priv_sta);
+ }
+ 
+@@ -2038,15 +2044,12 @@ static void minstrel_ht_add_debugfs(stru
+ 	mp->fixed_rate_idx = (u32) -1;
+ 	debugfs_create_u32("fixed_rate_idx", S_IRUGO | S_IWUGO, debugfsdir,
+ 			   &mp->fixed_rate_idx);
+-
+-	orca_add_debugfs_api(hw, priv, debugfsdir);
+ }
+ #endif
+ 
+ static void
+ minstrel_ht_free(void *priv)
+ {
+-	orca_remove_debugfs_api(priv);
+ 	kfree(priv);
+ }
+ 
+--- a/net/mac80211/rc80211_minstrel_ht.h
++++ b/net/mac80211/rc80211_minstrel_ht.h
+@@ -74,11 +74,6 @@
+ #define MINSTREL_SAMPLE_INTERVAL	(HZ / 50)	/* 20 ms */
+ #define MINSTREL_UPDATE_INTERVAL	(HZ / 20)	/* 50 ms */
+ 
+-#define ORCA_MONITOR_TXS		BIT(0)
+-#define ORCA_MONITOR_RXS		BIT(1)
+-#define ORCA_MONITOR_STATS		BIT(2)
+-#define ORCA_ECHO_TPRC			BIT(7)
+-
+ struct minstrel_priv {
+ 	struct ieee80211_hw *hw;
+ 	unsigned int cw_min;
+@@ -98,15 +93,6 @@ struct minstrel_priv {
+ 	 */
+ 	u32 fixed_rate_idx;
+ #endif
+-#ifdef CPTCFG_MAC80211_ORCA_UAPI
+-	struct rchan *relay_ev;
+-	spinlock_t relay_lock;
+-
+-	struct list_head stations;
+-	spinlock_t sta_wlock;
+-
+-	u8 monitor;
+-#endif
+ };
+ 
+ 
+@@ -167,9 +153,6 @@ struct minstrel_sample_category {
+ };
+ 
+ struct minstrel_ht_sta {
+-#ifdef CPTCFG_MAC80211_ORCA_UAPI
+-	struct list_head list;
+-#endif
+ 	struct ieee80211_sta *sta;
+ 	spinlock_t lock;
+ 
+@@ -229,153 +212,6 @@ struct minstrel_ht_sta {
+ 
+ void minstrel_ht_add_sta_debugfs(void *priv, void *priv_sta, struct dentry *dir);
+ 
+-#ifdef CPTCFG_MAC80211_ORCA_UAPI
+-void orca_sta_update(struct minstrel_priv *mp, struct minstrel_ht_sta *mi);
+-void orca_sta_remove(struct minstrel_priv *mp, struct minstrel_ht_sta *mi);
+-void __orca_report_tx_status(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
+-			     struct ieee80211_tx_info *info,
+-			     u16 *rate_list, s16* txpwr_list, int n_rates);
+-void __orca_report_rx_status(struct minstrel_priv *mp, u8 *addr,
+-			     s8 last_signal, u8 chain_status,
+-			     s8 *chain_signal);
+-void __orca_report_rate_update(struct minstrel_priv *mp,
+-			       struct minstrel_ht_sta *mi, u16 rate,
+-			       struct minstrel_rate_stats *mrs);
+-void __orca_report_best_rates(struct minstrel_priv *mp,
+-			      struct minstrel_ht_sta *mi);
+-void __orca_report_estimated_throughput(struct minstrel_priv *mp,
+-					struct minstrel_ht_sta *mi);
+-void __orca_report_sample_rates(struct minstrel_priv *mp,
+-				struct minstrel_ht_sta *mi);
+-void orca_add_debugfs_api(struct ieee80211_hw *hw, void *priv,
+-				 struct dentry *dir);
+-void orca_remove_debugfs_api(void *priv);
+-#else
+-static inline void
+-orca_sta_update(struct minstrel_priv *mp, struct minstrel_ht_sta *mi)
+-{
+-}
+-static inline void
+-orca_sta_remove(struct minstrel_priv *mp, struct minstrel_ht_sta *mi)
+-{
+-}
+-static inline void
+-orca_add_debugfs_api(struct ieee80211_hw *hw, void *priv,
+-			    struct dentry *dir)
+-{
+-}
+-static inline void
+-orca_remove_debugfs_api(void *priv)
+-{
+-}
+-#endif
+-
+-static inline void
+-orca_report_tx_status(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
+-		      struct ieee80211_tx_info *info,
+-		      u16 *rate_list, s16 *txpwr_list, int n_rates)
+-{
+-#ifdef CPTCFG_MAC80211_ORCA_UAPI
+-	struct sta_info *sta_info = container_of(mi->sta, struct sta_info, sta);
+-
+-	if (!(sta_info->sdata->orca_monitor & ORCA_MONITOR_TXS))
+-		return;
+-
+-	__orca_report_tx_status(mp, mi, info, rate_list, txpwr_list,
+-				       n_rates);
+-#endif
+-}
+-
+-static inline void
+-orca_report_rx_status(struct minstrel_priv *mp, struct sta_info *sta,
+-		      struct ieee80211_rx_status *status)
+-{
+-#ifdef CPTCFG_MAC80211_ORCA_UAPI
+-	if (!(sta->sdata->orca_monitor & ORCA_MONITOR_RXS))
+-		return;
+-
+-	__orca_report_rx_status(mp, sta->addr,
+-				(!(status->flag & RX_FLAG_NO_SIGNAL_VAL) ? status->signal : -1),
+-				status->chains,
+-				status->chain_signal);
+-#endif
+-}
+-
+-static inline void
+-orca_report_rate_update(struct minstrel_priv *mp,
+-			struct minstrel_ht_sta *mi, u16 rate,
+-			struct minstrel_rate_stats *mrs)
+-{
+-#ifdef CPTCFG_MAC80211_ORCA_UAPI
+-	struct sta_info *sta_info = container_of(mi->sta, struct sta_info, sta);
+-
+-	if (!(sta_info->sdata->orca_monitor & ORCA_MONITOR_STATS))
+-		return;
+-
+-	__orca_report_rate_update(mp, mi, rate, mrs);
+-#endif
+-}
+-
+-static inline void
+-orca_report_best_rates(struct minstrel_priv *mp, struct minstrel_ht_sta *mi)
+-{
+-#ifdef CPTCFG_MAC80211_ORCA_UAPI
+-	struct sta_info *sta_info = container_of(mi->sta, struct sta_info, sta);
+-
+-	if (!(sta_info->sdata->orca_monitor & ORCA_MONITOR_STATS))
+-		return;
+-
+-	__orca_report_best_rates(mp, mi);
+-#endif
+-}
+-
+-static inline void
+-orca_report_estimated_throughput(struct minstrel_priv *mp,
+-				 struct minstrel_ht_sta *mi)
+-{
+-#ifdef CPTCFG_MAC80211_ORCA_UAPI
+-	struct sta_info *sta_info = container_of(mi->sta, struct sta_info, sta);
+-
+-	if (!(sta_info->sdata->orca_monitor & ORCA_MONITOR_STATS))
+-		return;
+-
+-	__orca_report_estimated_throughput(mp, mi);
+-#endif
+-}
+-
+-static inline void
+-orca_report_sample_rates(struct minstrel_priv *mp, struct minstrel_ht_sta *mi)
+-{
+-#ifdef CPTCFG_MAC80211_ORCA_UAPI
+-	struct sta_info *sta_info = container_of(mi->sta, struct sta_info, sta);
+-
+-	if (!(sta_info->sdata->orca_monitor & ORCA_MONITOR_STATS))
+-		return;
+-
+-	__orca_report_sample_rates(mp, mi);
+-#endif
+-}
+-
+-static inline bool
+-orca_sta_rc_manual_mode(struct minstrel_ht_sta *mi)
+-{
+-#ifdef CPTCFG_MAC80211_ORCA_UAPI
+-	return mi->rc_manual;
+-#else
+-	return false;
+-#endif
+-}
+-
+-static inline bool
+-orca_sta_tpc_manual_mode(struct minstrel_ht_sta *mi)
+-{
+-#ifdef CPTCFG_MAC80211_ORCA_UAPI
+-	return mi->tpc_manual;
+-#else
+-	return false;
+-#endif
+-}
+-
+ void minstrel_ht_set_rate(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
+ 						  struct ieee80211_sta_rates *ratetbl, int offset,
+ 						  int index);
+@@ -385,4 +221,9 @@ void minstrel_ht_update_rates(struct min
+ 			      bool force);
+ void minstrel_ht_update_stats(struct minstrel_priv *mp, struct minstrel_ht_sta *mi);
+ 
++u16 minstrel_ht_txrate_to_minstrel(struct minstrel_priv *mp,
++				   struct minstrel_ht_sta *mi,
++				   struct ieee80211_tx_rate *rate);
++u16 minstrel_ht_ri_to_minstrel(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
++			       struct rate_info *rate);
+ #endif
+--- a/net/mac80211/rate.c
++++ b/net/mac80211/rate.c
+@@ -14,6 +14,7 @@
+ #include "rate.h"
+ #include "ieee80211_i.h"
+ #include "debugfs.h"
++#include "orca_uapi.h"
+ 
+ struct rate_control_alg {
+ 	struct list_head list;
+@@ -122,25 +123,27 @@ void rate_control_rate_update(struct iee
+ 	void *priv_sta = sta->rate_ctrl_priv;
+ 	struct ieee80211_chanctx_conf *chanctx_conf;
+ 
+-	if (ref && ref->ops->rate_update) {
+-		rcu_read_lock();
++	rcu_read_lock();
+ 
+-		chanctx_conf = rcu_dereference(sta->sdata->vif.bss_conf.chanctx_conf);
+-		if (WARN_ON(!chanctx_conf)) {
+-			rcu_read_unlock();
+-			return;
+-		}
++	chanctx_conf = rcu_dereference(sta->sdata->vif.bss_conf.chanctx_conf);
++	if (WARN_ON(!chanctx_conf)) {
++		rcu_read_unlock();
++		return;
++	}
+ 
++	if (ref && ref->ops->rate_update) {
+ 		spin_lock_bh(&sta->rate_ctrl_lock);
+ 		ref->ops->rate_update(ref->priv, sband, &chanctx_conf->def,
+ 				      ista, priv_sta, changed);
+ 		spin_unlock_bh(&sta->rate_ctrl_lock);
+-		rcu_read_unlock();
+ 	}
+ 
+-	if (sta->uploaded)
++	if (sta->uploaded) {
++		orca_sta_update(local, sta, false);
+ 		drv_link_sta_rc_update(local, sta->sdata, link_sta->pub,
+ 				       changed);
++	}
++	rcu_read_unlock();
+ }
+ 
+ int ieee80211_rate_control_register(const struct rate_control_ops *ops)
+--- a/net/mac80211/sta_info.c
++++ b/net/mac80211/sta_info.c
+@@ -27,6 +27,7 @@
+ #include "debugfs_sta.h"
+ #include "mesh.h"
+ #include "wme.h"
++#include "orca_uapi.h"
+ 
+ /**
+  * DOC: STA information lifetime rules
+@@ -431,6 +432,7 @@ void sta_info_free(struct ieee80211_loca
+ 			break;
+ 	}
+ 
++	orca_sta_remove(local, sta);
+ 	if (sta->rate_ctrl)
+ 		rate_control_free_sta(sta);
+ 
+@@ -645,6 +647,7 @@ __sta_info_alloc(struct ieee80211_sub_if
+ 
+ 	if (sta_prepare_rate_control(local, sta, gfp))
+ 		goto free_txq;
++	orca_sta_init(local, sta, gfp);
+ 
+ 	sta->airtime_weight = IEEE80211_DEFAULT_AIRTIME_WEIGHT;
+ 
+@@ -899,6 +902,7 @@ static int sta_info_insert_finish(struct
+ 
+ 	ieee80211_sta_debugfs_add(sta);
+ 	rate_control_add_sta_debugfs(sta);
++	orca_sta_update(local, sta, true);
+ 	if (sta->sta.valid_links) {
+ 		int i;
+ 
+--- a/net/mac80211/sta_info.h
++++ b/net/mac80211/sta_info.h
+@@ -716,6 +716,10 @@ struct sta_info {
+ 
+ #ifdef CPTCFG_MAC80211_DEBUGFS
+ 	struct dentry *debugfs_dir;
++	struct {
++		spinlock_t lock;
++		bool added;
++	} orca;
+ #endif
+ 
+ 	struct codel_params cparams;
