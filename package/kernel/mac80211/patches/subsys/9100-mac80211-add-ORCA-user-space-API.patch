@@ -698,7 +698,7 @@
  #endif
 --- /dev/null
 +++ b/net/mac80211/orca_uapi.c
-@@ -0,0 +1,1210 @@
+@@ -0,0 +1,1212 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * ORCA - Open-Source Resource Control API
@@ -714,7 +714,9 @@
 +#include "rate.h"
 +#include "rc80211_minstrel_ht.h"
 +
-+#define ORCA_VERSION "2"
++/* IMPORTANT: always change patch version when you do any change! */
++#define ORCA_MAJOR_VERSION 2
++#define ORCA_PATCH_VERSION 1
 +
 +extern u8 sample_table[SAMPLE_COLUMNS][MCS_GROUP_RATES];
 +
@@ -758,7 +760,7 @@
 +orca_read_api_info(struct seq_file *s, void *data)
 +{
 +	int i, j;
-+	seq_printf(s, "orca_version;%s\n", ORCA_VERSION);
++	seq_printf(s, "orca_version;%x;%x\n", ORCA_MAJOR_VERSION, ORCA_PATCH_VERSION);
 +
 +	seq_printf(s, "#group;index;offset;type;nss;bw;gi");
 +	for (i = 0; i < MCS_GROUP_RATES; i++)
