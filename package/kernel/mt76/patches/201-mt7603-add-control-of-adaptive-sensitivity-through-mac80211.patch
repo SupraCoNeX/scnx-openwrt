@@ -1,6 +1,6 @@
 --- a/mt7603/init.c
 +++ b/mt7603/init.c
-@@ -531,6 +531,8 @@ int mt7603_register_device(struct mt7603
+@@ -539,6 +539,8 @@ int mt7603_register_device(struct mt7603
  	ieee80211_hw_set(hw, HOST_BROADCAST_PS_BUFFERING);
  	ieee80211_hw_set(hw, NEEDS_UNIQUE_STA_ADDR);
  
