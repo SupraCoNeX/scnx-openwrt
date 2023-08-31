@@ -1,15 +1,9 @@
 --- a/mt7615/main.c
 +++ b/mt7615/main.c
-@@ -1325,6 +1325,53 @@ static void mt7615_set_rekey_data(struct
+@@ -1325,6 +1325,47 @@ static void mt7615_set_rekey_data(struct
  }
  #endif /* CONFIG_PM */
  
-+static bool mt7615_get_scs(struct ieee80211_hw *hw) {
-+	struct mt7615_dev *dev = mt7615_hw_dev(hw);
-+
-+	return dev->phy.scs_en;
-+}
-+
 +static int mt7615_set_scs(struct mt7615_dev *dev, bool enable) {
 +	struct mt7615_phy *ext_phy;
 +
@@ -54,7 +48,7 @@
  const struct ieee80211_ops mt7615_ops = {
  	.tx = mt7615_tx,
  	.start = mt7615_start,
-@@ -1372,6 +1419,8 @@ const struct ieee80211_ops mt7615_ops =
+@@ -1372,6 +1413,8 @@ const struct ieee80211_ops mt7615_ops =
  	.set_rekey_data = mt7615_set_rekey_data,
  #endif /* CONFIG_PM */
  	.set_sar_specs = mt7615_set_sar_specs,
