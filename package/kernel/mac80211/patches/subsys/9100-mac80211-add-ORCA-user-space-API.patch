@@ -714,9 +714,9 @@
 +#include "rate.h"
 +#include "rc80211_minstrel_ht.h"
 +
-+/* IMPORTANT: always change patch version when you do any change! */
++/* IMPORTANT: always change patch version when you make any change here! */
 +#define ORCA_MAJOR_VERSION 2
-+#define ORCA_PATCH_VERSION 1
++#define ORCA_PATCH_VERSION 2
 +
 +extern u8 sample_table[SAMPLE_COLUMNS][MCS_GROUP_RATES];
 +
@@ -1620,7 +1620,7 @@
 +orca_exec_and_echo_cmd(struct minstrel_priv *mp, enum api_cmd cmd,
 +		       char* cmd_str, char *args)
 +{
-+	char buf[96];
++	char buf[128];
 +	int err = 0, len;
 +
 +	/* Store command with timestamp, args may be modified later */
@@ -1654,13 +1654,13 @@
 +	struct minstrel_priv *mp = file->private_data;
 +	enum api_cmd cmd;
 +	char *pos, *cur;
-+	char buf[64];
++	char buf[96];
 +	size_t len = count;
 +	int err;
 +	bool echo = true;
 +
 +	if (len > sizeof(buf) - 1)
-+		return -EINVAL;
++		return -EMSGSIZE;
 +
 +	if (copy_from_user(buf, userbuf, len))
 +		return -EFAULT;
