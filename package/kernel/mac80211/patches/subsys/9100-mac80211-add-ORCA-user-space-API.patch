@@ -8,7 +8,7 @@
  
  /*
   * monitor mode reception
-@@ -1795,6 +1796,12 @@ ieee80211_rx_h_sta_process(struct ieee80
+@@ -1778,6 +1779,12 @@ ieee80211_rx_h_sta_process(struct ieee80
  		}
  	}
  
@@ -388,7 +388,7 @@
  
  	if (sample_group == &minstrel_mcs_groups[MINSTREL_CCK_GROUP]) {
  		int idx = sample_idx % ARRAY_SIZE(mp->cck_rates);
-@@ -1688,7 +1753,7 @@ minstrel_ht_update_caps(void *priv, stru
+@@ -1687,7 +1752,7 @@ minstrel_ht_update_caps(void *priv, stru
  	else
  		use_vht = 0;
  
@@ -397,7 +397,7 @@
  
  	mi->sta = sta;
  	mi->band = sband->band;
-@@ -1801,7 +1866,11 @@ minstrel_ht_update_caps(void *priv, stru
+@@ -1795,7 +1860,11 @@ minstrel_ht_update_caps(void *priv, stru
  
  	/* create an initial rate table with the lowest supported rates */
  	minstrel_ht_update_stats(mp, mi);
@@ -410,7 +410,7 @@
  }
  
  static void
-@@ -1837,12 +1906,24 @@ minstrel_ht_alloc_sta(void *priv, struct
+@@ -1831,12 +1900,24 @@ minstrel_ht_alloc_sta(void *priv, struct
  			max_rates = sband->n_bitrates;
  	}
  
@@ -436,7 +436,7 @@
  	kfree(priv_sta);
  }
  
-@@ -1936,6 +2017,9 @@ minstrel_ht_alloc(struct ieee80211_hw *h
+@@ -1927,6 +2008,9 @@ minstrel_ht_alloc(struct ieee80211_hw *h
  
  	mp->hw = hw;
  	mp->update_interval = HZ / 20;
@@ -446,7 +446,7 @@
  
  	minstrel_ht_init_cck_rates(mp);
  	for (i = 0; i < ARRAY_SIZE(mp->hw->wiphy->bands); i++)
-@@ -1945,6 +2029,41 @@ minstrel_ht_alloc(struct ieee80211_hw *h
+@@ -1936,6 +2020,41 @@ minstrel_ht_alloc(struct ieee80211_hw *h
  }
  
  #ifdef CPTCFG_MAC80211_DEBUGFS
@@ -488,7 +488,7 @@
  static void minstrel_ht_add_debugfs(struct ieee80211_hw *hw, void *priv,
  				    struct dentry *debugfsdir)
  {
-@@ -1953,12 +2072,22 @@ static void minstrel_ht_add_debugfs(stru
+@@ -1944,12 +2063,22 @@ static void minstrel_ht_add_debugfs(stru
  	mp->fixed_rate_idx = (u32) -1;
  	debugfs_create_u32("fixed_rate_idx", S_IRUGO | S_IWUGO, debugfsdir,
  			   &mp->fixed_rate_idx);
@@ -524,8 +524,8 @@
 +
  struct minstrel_priv {
  	struct ieee80211_hw *hw;
- 	bool has_mrr;
-@@ -92,6 +97,16 @@ struct minstrel_priv {
+ 	unsigned int cw_min;
+@@ -91,6 +96,16 @@ struct minstrel_priv {
  	 *   - setting will be applied on next update
  	 */
  	u32 fixed_rate_idx;
@@ -542,7 +542,7 @@
  #endif
  };
  
-@@ -153,7 +168,18 @@ struct minstrel_sample_category {
+@@ -152,7 +167,18 @@ struct minstrel_sample_category {
  };
  
  struct minstrel_ht_sta {
@@ -561,7 +561,7 @@
  
  	/* ampdu length (average, per sampling interval) */
  	unsigned int ampdu_len;
-@@ -197,7 +223,134 @@ struct minstrel_ht_sta {
+@@ -196,7 +222,134 @@ struct minstrel_ht_sta {
  };
  
  void minstrel_ht_add_sta_debugfs(void *priv, void *priv_sta, struct dentry *dir);
@@ -716,7 +716,7 @@
 +
 +/* IMPORTANT: always change patch version when you make any change here! */
 +#define ORCA_MAJOR_VERSION 2
-+#define ORCA_PATCH_VERSION 2
++#define ORCA_PATCH_VERSION 3
 +
 +extern u8 sample_table[SAMPLE_COLUMNS][MCS_GROUP_RATES];
 +
