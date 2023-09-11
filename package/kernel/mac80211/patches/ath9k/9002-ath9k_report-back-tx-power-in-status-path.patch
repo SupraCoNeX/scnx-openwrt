@@ -64,7 +64,7 @@
  			continue;
  		}
  
-@@ -2482,13 +2509,15 @@ void ath_tx_cabq(struct ieee80211_hw *hw
+@@ -2480,13 +2507,15 @@ void ath_tx_cabq(struct ieee80211_hw *hw
  
  static void ath_tx_complete(struct ath_softc *sc, struct sk_buff *skb,
  			    int tx_flags, struct ath_txq *txq,
@@ -81,7 +81,7 @@
  
  	ath_dbg(common, XMIT, "TX complete: skb: %p\n", skb);
  
-@@ -2527,8 +2556,20 @@ static void ath_tx_complete(struct ath_s
+@@ -2525,8 +2554,20 @@ static void ath_tx_complete(struct ath_s
  	}
  	spin_unlock_irqrestore(&sc->sc_pm_lock, flags);
  
@@ -102,7 +102,7 @@
  	__skb_queue_tail(&txq->complete_q, skb);
  }
  
-@@ -2562,7 +2603,7 @@ static void ath_tx_complete_buf(struct a
+@@ -2560,7 +2601,7 @@ static void ath_tx_complete_buf(struct a
  			complete(&sc->paprd_complete);
  	} else {
  		ath_debug_stat_tx(sc, bf, ts, txq, tx_flags);
