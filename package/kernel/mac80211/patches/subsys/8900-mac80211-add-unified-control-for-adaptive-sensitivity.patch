@@ -1,6 +1,6 @@
 --- a/include/net/mac80211.h
 +++ b/include/net/mac80211.h
-@@ -2716,6 +2716,11 @@ enum ieee80211_hw_flags {
+@@ -2758,6 +2758,11 @@ enum ieee80211_hw_flags {
   *
   * @flags: hardware flags, see &enum ieee80211_hw_flags.
   *
@@ -12,7 +12,7 @@
   * @extra_tx_headroom: headroom to reserve in each transmit skb
   *	for use by the driver (e.g. for transmit headers.)
   *
-@@ -2831,6 +2836,7 @@ struct ieee80211_hw {
+@@ -2873,6 +2878,7 @@ struct ieee80211_hw {
  	const char *rate_control_algorithm;
  	void *priv;
  	unsigned long flags[BITS_TO_LONGS(NUM_IEEE80211_HW_FLAGS)];
@@ -20,7 +20,7 @@
  	unsigned int extra_tx_headroom;
  	unsigned int extra_beacon_tailroom;
  	int vif_data_size;
-@@ -3597,6 +3603,20 @@ struct ieee80211_prep_tx_info {
+@@ -3639,6 +3645,20 @@ struct ieee80211_prep_tx_info {
  	u8 success:1;
  };
  
@@ -41,7 +41,7 @@
  /**
   * struct ieee80211_ops - callbacks from mac80211 to the driver
   *
-@@ -4208,6 +4228,14 @@ struct ieee80211_prep_tx_info {
+@@ -4266,6 +4286,14 @@ struct ieee80211_prep_tx_info {
   *	flow offloading for flows originating from the vif.
   *	Note that the driver must not assume that the vif driver_data is valid
   *	at this point, since the callback can be called during netdev teardown.
@@ -56,7 +56,7 @@
   */
  struct ieee80211_ops {
  	void (*tx)(struct ieee80211_hw *hw,
-@@ -4570,6 +4598,9 @@ struct ieee80211_ops {
+@@ -4639,6 +4667,9 @@ struct ieee80211_ops {
  			    struct net_device *dev,
  			    enum tc_setup_type type,
  			    void *type_data);
