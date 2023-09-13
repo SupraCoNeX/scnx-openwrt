@@ -698,7 +698,7 @@
  #endif
 --- /dev/null
 +++ b/net/mac80211/orca_uapi.c
-@@ -0,0 +1,1212 @@
+@@ -0,0 +1,1211 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * ORCA - Open-Source Resource Control API
@@ -716,9 +716,13 @@
 +
 +/* IMPORTANT: always change patch version when you make any change here! */
 +#define ORCA_MAJOR_VERSION 2
-+#define ORCA_PATCH_VERSION 3
++#define ORCA_PATCH_VERSION 4
 +
 +extern u8 sample_table[SAMPLE_COLUMNS][MCS_GROUP_RATES];
++
++/* IMPORTANT: make sure that the order matches the order of
++ * enum ieee80211_feature_ctrl in mac80211.h ! */
++static char *feature_pretty[] = { "adaptive_sens", "tpc" };
 +
 +enum api_cmd {
 +	PHY_CMD_START,
@@ -882,9 +886,8 @@
 +	struct sta_info *sta_info;
 +	struct minstrel_priv *mp = local->rate_ctrl->priv;
 +	struct minstrel_ht_sta *mi;
-+	char tmp_on[64] = {};
-+	char tmp_off[64] = {};
-+	int len, ofs_on = 0, ofs_off = 0;
++	char tmp[64] = {};
++	int len, ofs = 0;
 +	int i = 0;
 +
 +	seq_printf(s, "drv;%s\n", wiphy_dev(wiphy)->driver->name);
@@ -921,49 +924,35 @@
 +skip_tpc:
 +	/* Current monitor modes states */
 +	if (mp->monitor & ORCA_MONITOR_TXS)
-+		ofs_on += sprintf(tmp_on, "txs,");
++		ofs += sprintf(tmp, "txs,");
 +	if (mp->monitor & ORCA_MONITOR_RXS)
-+		ofs_on += sprintf(tmp_on + ofs_on, "rxs,");
++		ofs += sprintf(tmp + ofs, "rxs,");
 +	if (mp->monitor & ORCA_MONITOR_STATS)
-+		ofs_on += sprintf(tmp_on + ofs_on, "stats,");
++		ofs += sprintf(tmp + ofs, "stats,");
 +	if (mp->monitor & ORCA_ECHO_TPRC)
-+		ofs_on += sprintf(tmp_on + ofs_on, "tprc_echo,");
++		ofs += sprintf(tmp + ofs, "tprc_echo,");
 +
-+	len = strlen(tmp_on);
++	len = strlen(tmp);
 +	if (len)
-+		tmp_on[len - 1] = 0;
++		tmp[len - 1] = 0;
 +
-+	seq_printf(s, "mon;%s\n", tmp_on);
++	seq_printf(s, "mon;%s\n", tmp);
 +
 +	/* Controllable feature information */
-+	if (!local->ops->get_feature_state)
++	if (!local->ops->get_feature_state || mp->hw->feature_ctrl == 0)
 +		goto skip_ftrs;
 +
-+	tmp_on[0] = 0;
-+	ofs_on = 0;
-+	if (mp->hw->feature_ctrl & IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY) {
-+		if (local->ops->get_feature_state(mp->hw, IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY))
-+			ofs_on += sprintf(tmp_on, "adaptive_sens,");
-+		else
-+			ofs_off += sprintf(tmp_off, "adaptive_sens,");
++	seq_printf(s, "ftrs;%u", hweight_long(mp->hw->feature_ctrl));
++	for (i = 0; i < NUM_IEEE80211_FTRCTRL; i++) {
++		u32 state;
++
++		if (!ieee80211_feature_ctrl_has(mp->hw, i))
++			continue;
++
++		state = local->ops->get_feature_state(mp->hw, i);
++		seq_printf(s, ";%s,%u", feature_pretty[i], state);
 +	}
-+	if (mp->hw->feature_ctrl & IEEE80211_FTRCTRL_TPC) {
-+		if (local->ops->get_feature_state(mp->hw, IEEE80211_FTRCTRL_TPC))
-+			ofs_on += sprintf(tmp_on + ofs_on, "tpc,");
-+		else
-+			ofs_off += sprintf(tmp_off + ofs_off, "tpc,");
-+	}
-+
-+	len = strlen(tmp_on);
-+	if (len)
-+		tmp_on[len - 1] = 0;
-+
-+	len = strlen(tmp_off);
-+	if (len)
-+		tmp_off[len - 1] = 0;
-+
-+	seq_printf(s, "ftrs;on;%s\n", tmp_on);
-+	seq_printf(s, "ftrs;off;%s\n", tmp_off);
++	seq_printf(s, "\n");
 +
 +skip_ftrs:
 +	/* keep this block last! */
@@ -1184,10 +1173,11 @@
 +orca_phy_set_feature(struct minstrel_priv *mp, char *args)
 +{
 +	struct ieee80211_local *local = hw_to_local(mp->hw);
-+	enum ieee80211_feature_ctrl feature;
++	enum ieee80211_feature_ctrl feature = -1;
 +	char *feature_str, *arg;
-+	int res;
-+	bool enable;
++	u32 state;
++	int i, res;
++	bool allow_str = true;
 +
 +	/* We need at least the feature name and one argument */
 +	feature_str = strsep(&args, ";");
@@ -1195,28 +1185,35 @@
 +	if (!feature_str || !arg)
 +		return -EINVAL;
 +
-+	if (!strcmp(arg, "on"))
-+		enable = true;
-+	else if (!strcmp(arg, "off"))
-+		enable = false;
-+	else
-+		return -EPERM;
-+
 +	if (!local->ops->set_feature_state)
 +		return -EPERM;
 +
-+	if (!strcmp(feature_str, "adaptive_sens"))
-+		feature = IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY;
-+	else if (!strcmp(feature_str, "tpc"))
-+		feature = IEEE80211_FTRCTRL_TPC;
-+	else
++	/* This only works if feature_pretty and enum ieee80211_feature_ctrl
++	 * (in mac80211.h) are equally ordered! */
++	for (i = 0; i < ARRAY_SIZE(feature_pretty); i++) {
++		if (!strcmp(feature_str, feature_pretty[i])) {
++			feature = i;
++			break;
++		}
++	}
++
++	if (feature == -1)
 +		return -ENOENT;
 +
++	if (allow_str && !strcmp(arg, "on")) {
++		state = 1;
++	} else if (allow_str && !strcmp(arg, "off")) {
++		state = 0;
++	} else {
++		if (kstrtou32(arg, 16, &state) || state == U32_MAX)
++			return -EINVAL;
++	}
++
 +	/* Check if the hardware/driver supports the given feature ctrl */
-+	if (!(mp->hw->feature_ctrl & feature))
++	if (!ieee80211_feature_ctrl_has(mp->hw, feature))
 +		return -EPERM;
 +
-+	res = local->ops->set_feature_state(mp->hw, feature, enable);
++	res = local->ops->set_feature_state(mp->hw, feature, state);
 +	if (res)
 +		return -EIO; /* TODO: more suitable error? */
 +
@@ -1887,6 +1884,8 @@
 +void orca_add_debugfs_api(struct ieee80211_hw *hw, void *priv, struct dentry *dir)
 +{
 +	struct minstrel_priv *mp = priv;
++
++	BUILD_BUG_ON(ARRAY_SIZE(feature_pretty) != NUM_IEEE80211_FTRCTRL);
 +
 +	spin_lock_init(&mp->relay_lock);
 +	spin_lock_init(&mp->sta_wlock);
