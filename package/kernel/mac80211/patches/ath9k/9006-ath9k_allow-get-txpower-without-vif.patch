@@ -1,0 +1,18 @@
+--- a/drivers/net/wireless/ath/ath9k/main.c
++++ b/drivers/net/wireless/ath/ath9k/main.c
+@@ -2769,10 +2769,13 @@ static int ath9k_get_txpower(struct ieee
+ 			     int *dbm)
+ {
+ 	struct ath_softc *sc = hw->priv;
+-	struct ath_vif *avp = (void *)vif->drv_priv;
++	struct ath_vif *avp = NULL;
+ 
+ 	mutex_lock(&sc->mutex);
+-	if (avp->chanctx)
++	if (vif)
++		avp = (void *)vif->drv_priv;
++
++	if (avp && avp->chanctx)
+ 		*dbm = avp->chanctx->cur_txpower;
+ 	else
+ 		*dbm = sc->cur_chan->cur_txpower;
