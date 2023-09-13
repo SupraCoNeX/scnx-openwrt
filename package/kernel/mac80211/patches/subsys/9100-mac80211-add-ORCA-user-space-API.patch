@@ -698,7 +698,7 @@
  #endif
 --- /dev/null
 +++ b/net/mac80211/orca_uapi.c
-@@ -0,0 +1,1211 @@
+@@ -0,0 +1,1218 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * ORCA - Open-Source Resource Control API
@@ -716,7 +716,7 @@
 +
 +/* IMPORTANT: always change patch version when you make any change here! */
 +#define ORCA_MAJOR_VERSION 2
-+#define ORCA_PATCH_VERSION 4
++#define ORCA_PATCH_VERSION 5
 +
 +extern u8 sample_table[SAMPLE_COLUMNS][MCS_GROUP_RATES];
 +
@@ -888,7 +888,7 @@
 +	struct minstrel_ht_sta *mi;
 +	char tmp[64] = {};
 +	int len, ofs = 0;
-+	int i = 0;
++	int power_limit, i = 0;
 +
 +	seq_printf(s, "drv;%s\n", wiphy_dev(wiphy)->driver->name);
 +
@@ -922,6 +922,13 @@
 +	seq_printf(s, "\n");
 +
 +skip_tpc:
++	if (local->ops->get_txpower) {
++		if (!local->ops->get_txpower(&local->hw, NULL, &power_limit))
++			/* double it, it's better for ath9k and driver using
++			 * get_txpower use 0.5 dBm steps anyway */
++			seq_printf(s, "pwr_limit;%x\n", power_limit * 2);
++	}
++
 +	/* Current monitor modes states */
 +	if (mp->monitor & ORCA_MONITOR_TXS)
 +		ofs += sprintf(tmp, "txs,");
