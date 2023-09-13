@@ -4,35 +4,36 @@
  	ieee80211_hw_set(hw, HOST_BROADCAST_PS_BUFFERING);
  	ieee80211_hw_set(hw, NEEDS_UNIQUE_STA_ADDR);
  
-+	hw->feature_ctrl = IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY;
++	ieee80211_feature_ctrl_set(hw, IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY);
 +
  	/* init led callbacks */
  	if (IS_ENABLED(CONFIG_MT76_LEDS)) {
  		dev->mphy.leds.cdev.brightness_set = mt7603_led_set_brightness;
 --- a/mt7603/main.c
 +++ b/mt7603/main.c
-@@ -700,6 +700,34 @@ static void mt7603_tx(struct ieee80211_h
+@@ -700,6 +700,35 @@ static void mt7603_tx(struct ieee80211_h
  	mt76_tx(&dev->mphy, control->sta, wcid, skb);
  }
  
-+static int mt7603_get_feature_state(struct ieee80211_hw *hw,
++static u32 mt7603_get_feature_state(struct ieee80211_hw *hw,
 +				    enum ieee80211_feature_ctrl feature)
 +{
 +	struct mt7603_dev *dev = hw->priv;
 +
 +	switch (feature) {
 +	case IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY:
-+		return dev->dynamic_sensitivity;
++		return (u32)dev->dynamic_sensitivity;
 +	default:
-+		return -1;
++		return U32_MAX;
 +	}
 +}
 +
 +static int mt7603_set_feature_state(struct ieee80211_hw *hw,
 +				    enum ieee80211_feature_ctrl feature,
-+				    bool enable)
++				    u32 state)
 +{
 +	struct mt7603_dev *dev = hw->priv;
++	bool enable = !!state;
 +
 +	switch (feature) {
 +	case IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY:
@@ -46,7 +47,7 @@
  const struct ieee80211_ops mt7603_ops = {
  	.tx = mt7603_tx,
  	.start = mt7603_start,
-@@ -726,6 +754,8 @@ const struct ieee80211_ops mt7603_ops =
+@@ -726,6 +755,8 @@ const struct ieee80211_ops mt7603_ops =
  	.get_survey = mt76_get_survey,
  	.get_antenna = mt76_get_antenna,
  	.set_sar_specs = mt7603_set_sar_specs,
