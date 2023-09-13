@@ -75,7 +75,7 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
   * struct ieee80211_hw - hardware information and state
   *
   * This structure contains the configuration and hardware
-@@ -2866,11 +2887,11 @@ enum ieee80211_hw_flags {
+@@ -2867,11 +2888,11 @@ enum ieee80211_hw_flags {
   *
   * @max_mtu: the max mtu could be set.
   *
@@ -91,7 +91,7 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
   */
  struct ieee80211_hw {
  	struct ieee80211_conf conf;
-@@ -2908,8 +2929,8 @@ struct ieee80211_hw {
+@@ -2909,8 +2930,8 @@ struct ieee80211_hw {
  	u8 tx_sk_pacing_shift;
  	u8 weight_multiplier;
  	u32 max_mtu;
@@ -102,7 +102,7 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
  };
  
  static inline bool _ieee80211_hw_check(struct ieee80211_hw *hw,
-@@ -2926,6 +2947,8 @@ static inline void _ieee80211_hw_set(str
+@@ -2927,6 +2948,8 @@ static inline void _ieee80211_hw_set(str
  }
  #define ieee80211_hw_set(hw, flg)	_ieee80211_hw_set(hw, IEEE80211_HW_##flg)
  

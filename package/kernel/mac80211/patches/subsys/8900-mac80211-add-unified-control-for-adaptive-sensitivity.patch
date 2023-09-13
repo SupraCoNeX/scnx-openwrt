@@ -1,26 +1,27 @@
 --- a/include/net/mac80211.h
 +++ b/include/net/mac80211.h
-@@ -2758,6 +2758,11 @@ enum ieee80211_hw_flags {
+@@ -2758,6 +2758,12 @@ enum ieee80211_hw_flags {
   *
   * @flags: hardware flags, see &enum ieee80211_hw_flags.
   *
-+ * @feature_ctrl: flags for features that can be enabled/disabled by
++ * @feature_ctrl: flags for features that can be queried and set by
 + * 	the stack at runtime. Obviously, a set flag implicates that the
 + * 	hardware/driver has such a feature. However, a separate hw_flag
-+ * 	doesn't have to exist for this. see &enum ieee80211_feature_ctrl.
++ * 	doesn't have to exist for this. Use the dedicated getter/setter
++ * 	when working with this field. see &enum ieee80211_feature_ctrl.
 + *
   * @extra_tx_headroom: headroom to reserve in each transmit skb
   *	for use by the driver (e.g. for transmit headers.)
   *
-@@ -2873,6 +2878,7 @@ struct ieee80211_hw {
+@@ -2873,6 +2879,7 @@ struct ieee80211_hw {
  	const char *rate_control_algorithm;
  	void *priv;
  	unsigned long flags[BITS_TO_LONGS(NUM_IEEE80211_HW_FLAGS)];
-+	u16 feature_ctrl;
++	unsigned long feature_ctrl;
  	unsigned int extra_tx_headroom;
  	unsigned int extra_beacon_tailroom;
  	int vif_data_size;
-@@ -3639,6 +3645,20 @@ struct ieee80211_prep_tx_info {
+@@ -3639,6 +3646,41 @@ struct ieee80211_prep_tx_info {
  	u8 success:1;
  };
  
@@ -29,40 +30,65 @@
 + *
 + * These values are used for member feature_ctrl in struct ieee80211_hw
 + * and the driver ops get_feature_state and set_feature_state to dynamically
-+ * control the state (enable/disable) of a particular feature at runtime.
++ * control the state of a particular feature at runtime.
 + *
 + * @IEEE80211_FTRCTL_ADAPTIVE_SENSITIVITY: Adaptive sensitivity to
 + * 	dynamically adjust the receive sensitivity by a certain algorithm.
++ *
++ * @NUM_IEEE80211_FTRCTL: Number of features.
 + */
 +enum ieee80211_feature_ctrl {
-+	IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY = BIT(0),
++	IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY = 0,
++
++	/* keep last, obviously */
++	NUM_IEEE80211_FTRCTRL,
 +};
++
++static inline bool
++ieee80211_feature_ctrl_has(struct ieee80211_hw *hw,
++			   enum ieee80211_feature_ctrl ftr)
++{
++	WARN_ON(ftr == NUM_IEEE80211_FTRCTRL);
++	return test_bit(ftr, &hw->feature_ctrl);
++}
++
++static inline void
++ieee80211_feature_ctrl_set(struct ieee80211_hw *hw,
++			   enum ieee80211_feature_ctrl ftr)
++{
++	WARN_ON(ftr == NUM_IEEE80211_FTRCTRL);
++	return __set_bit(ftr, &hw->feature_ctrl);
++}
 +
  /**
   * struct ieee80211_ops - callbacks from mac80211 to the driver
   *
-@@ -4266,6 +4286,14 @@ struct ieee80211_prep_tx_info {
+@@ -4266,6 +4308,17 @@ struct ieee80211_prep_tx_info {
   *	flow offloading for flows originating from the vif.
   *	Note that the driver must not assume that the vif driver_data is valid
   *	at this point, since the callback can be called during netdev teardown.
-+ * @get_feature_state: Get the current state of the specified feature. This
-+ * 	must return 0 for 'disabled', 1 for 'enabled' and a negative value in
-+ * 	case the feature is not supported. However, a caller should check for
-+ * 	hw_flags prior to calling this.
-+ * @set_feature_state: Enable/disable the specified feature of the
++ * @get_feature_state: Get the current state of the specified feature. @state
++ * 	can be any value whose meaning is subject to the specific feature.
++ * 	However, U32_MAX must not be used because this must be returned in case
++ * 	the feature is not supported. A caller should check always check
++ * 	@feature_ctrl in struct ieee80211_hw prior to calling this.
++ * @set_feature_state: Sets the state of the specified feature of the
 + * 	hardware/driver. This may return 0 denoting the success and a positive
 + * 	non-zero value denoting failure. It must return a negative value in
 + * 	case the feature is not supported or cannot be controlled dynamically.
++ * 	@state can be any arbitrary value whose meaning is subject to the
++ * 	specified feature, however, U32_MAX is forbidden (see @get_feature_state).
   */
  struct ieee80211_ops {
  	void (*tx)(struct ieee80211_hw *hw,
-@@ -4639,6 +4667,9 @@ struct ieee80211_ops {
+@@ -4639,6 +4692,10 @@ struct ieee80211_ops {
  			    struct net_device *dev,
  			    enum tc_setup_type type,
  			    void *type_data);
-+	int (*get_feature_state)(struct ieee80211_hw *hw, enum ieee80211_feature_ctrl);
-+	int (*set_feature_state)(struct ieee80211_hw *hw, enum ieee80211_feature_ctrl,
-+				 bool enable);
++	u32 (*get_feature_state)(struct ieee80211_hw *hw,
++				 enum ieee80211_feature_ctrl feature);
++	int (*set_feature_state)(struct ieee80211_hw *hw,
++				 enum ieee80211_feature_ctrl feature, u32 state);
  };
  
  /**
