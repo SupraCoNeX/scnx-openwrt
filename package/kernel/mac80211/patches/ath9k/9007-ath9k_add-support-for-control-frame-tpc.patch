@@ -1,0 +1,191 @@
+--- a/drivers/net/wireless/ath/ath9k/debug.c
++++ b/drivers/net/wireless/ath/ath9k/debug.c
+@@ -1323,6 +1323,84 @@ static const struct file_operations fops
+ 	.llseek = default_llseek,
+ };
+ 
++static ssize_t
++read_file_selfgen_power(struct file *file, char __user *user_buf,
++			size_t count, loff_t *ppos)
++{
++	struct ath_softc *sc = file->private_data;
++	struct ath_hw *ah = sc->sc_ah;
++	char buf[64] = {};
++	unsigned int len = 0, size = ARRAY_SIZE(buf);
++	u32 regval;
++
++	if (!AR_SREV_9300_20_OR_LATER(ah)) {
++		len += scnprintf(buf, size,
++				 "TPC for selfgen frames not supported");
++		goto out;
++	}
++
++	regval = REG_READ(ah, AR_TPC);
++	len += scnprintf(buf, size, "ACK\t\t%u\n" "RTS/CTS\t\t%u\n"
++			 "CHIRP\t\t%u\n" "RPT\t\t%u\n",
++			 MS(regval, AR_TPC_ACK), MS(regval, AR_TPC_CTS),
++			 MS(regval, AR_TPC_CHIRP), MS(regval, AR_TPC_RPT));
++
++out:
++	return simple_read_from_buffer(user_buf, count, ppos, buf, len);
++}
++
++static ssize_t
++write_file_selfgen_power(struct file *file, const char __user *user_buf,
++			 size_t count, loff_t *ppos)
++{
++	struct ath_softc *sc = file->private_data;
++	struct ath_hw *ah = sc->sc_ah;
++	struct ath_regulatory *reg = ath9k_hw_regulatory(ah);
++	char buf[32], *cur, *next;
++	ssize_t len;
++	int i;
++	u8 tmp, power[4] = { MAX_RATE_POWER, MAX_RATE_POWER, MAX_RATE_POWER,
++			     MAX_RATE_POWER };
++
++	if (!AR_SREV_9300_20_OR_LATER(ah))
++		return -EPERM;
++
++	len = min(count, sizeof(buf) - 1);
++	if (copy_from_user(buf, user_buf, len))
++		return -EFAULT;
++
++	buf[len] = '\0';
++	next = buf;
++
++	cur = strsep(&next, ";");
++	for (i = 0; cur && i < 4; i++) {
++		if (kstrtou8(cur, 10, &tmp))
++			return -EINVAL;
++
++		/* Limited by regulatory but not by user power */
++		power[i] = min_t(u8, tmp, reg->power_limit);
++		cur = strsep(&next, ";");
++	}
++
++	if (!i)
++		return -EINVAL;
++
++	REG_WRITE(ah, AR_TPC, SM(power[0], AR_TPC_ACK) |
++			      SM(power[1], AR_TPC_CTS) |
++			      SM(power[2], AR_TPC_CHIRP) |
++			      SM(power[3], AR_TPC_RPT));
++
++	return count;
++}
++
++static const struct file_operations fops_selfgen_power = {
++	.read = read_file_selfgen_power,
++	.write = write_file_selfgen_power,
++	.open = simple_open,
++	.owner = THIS_MODULE,
++	.llseek = default_llseek,
++};
++
+ static ssize_t read_file_nf_override(struct file *file,
+ 				     char __user *user_buf,
+ 				     size_t count, loff_t *ppos)
+@@ -1793,8 +1871,10 @@ int ath9k_init_debug(struct ath_hw *ah)
+ 			    sc, &fops_ackto);
+ #endif
+ 	debugfs_create_file("tpc", 0600, sc->debug.debugfs_phy, sc, &fops_tpc);
+-	debugfs_create_file("txpwr_table", 0400, sc->debug.debugfs_phy, sc, &fops_txpwr_table);
+-
++	debugfs_create_file("txpwr_table", 0400, sc->debug.debugfs_phy, sc,
++			    &fops_txpwr_table);
++	debugfs_create_file("selfgen_power", 0600, sc->debug.debugfs_phy, sc,
++			    &fops_selfgen_power);
+ 	debugfs_create_file("nf_override", 0600,
+ 			    sc->debug.debugfs_phy, sc, &fops_nf_override);
+ 
+--- a/drivers/net/wireless/ath/ath9k/init.c
++++ b/drivers/net/wireless/ath/ath9k/init.c
+@@ -1037,6 +1037,13 @@ static void ath9k_set_hw_capab(struct at
+ 	ieee80211_feature_ctrl_set(hw, IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY);
+ 	ieee80211_feature_ctrl_set(hw, IEEE80211_FTRCTRL_TPC);
+ 
++	if (AR_SREV_9300_20_OR_LATER(sc->sc_ah)) {
++		ieee80211_feature_ctrl_set(hw, IEEE80211_FTRCTRL_ACK_TPC);
++		ieee80211_feature_ctrl_set(hw, IEEE80211_FTRCTRL_RTSCTS_TPC);
++		ieee80211_feature_ctrl_set(hw, IEEE80211_FTRCTRL_CHIRP_TPC);
++		ieee80211_feature_ctrl_set(hw, IEEE80211_FTRCTRL_RPT_TPC);
++	}
++
+ 	hw->wiphy->available_antennas_rx = BIT(ah->caps.max_rxchains) - 1;
+ 	hw->wiphy->available_antennas_tx = BIT(ah->caps.max_txchains) - 1;
+ 
+--- a/drivers/net/wireless/ath/ath9k/main.c
++++ b/drivers/net/wireless/ath/ath9k/main.c
+@@ -2800,6 +2800,47 @@ static void ath9k_set_ani(struct ath_sof
+ }
+ 
+ static u32
++ath9k_get_frame_txpower(struct ath_hw *ah, enum ieee80211_feature_ctrl feature)
++{
++	switch (feature) {
++	case IEEE80211_FTRCTRL_ACK_TPC:
++		return REG_READ_FIELD(ah, AR_TPC, AR_TPC_ACK);
++	case IEEE80211_FTRCTRL_RTSCTS_TPC:
++		return REG_READ_FIELD(ah, AR_TPC, AR_TPC_CTS);
++	case IEEE80211_FTRCTRL_CHIRP_TPC:
++		return REG_READ_FIELD(ah, AR_TPC, AR_TPC_CHIRP);
++	case IEEE80211_FTRCTRL_RPT_TPC:
++		return REG_READ_FIELD(ah, AR_TPC, AR_TPC_RPT);
++	default:
++		return U32_MAX;
++	}
++}
++
++static void
++ath9k_set_frame_txpower(struct ath_hw *ah, enum ieee80211_feature_ctrl feature,
++			u32 state)
++{
++	struct ath_regulatory *reg = ath9k_hw_regulatory(ah);
++	u8 val_limit = min_t(u8, state, reg->power_limit);
++
++	switch (feature) {
++	case IEEE80211_FTRCTRL_ACK_TPC:
++		REG_RMW_FIELD(ah, AR_TPC, AR_TPC_ACK, val_limit);
++		break;
++	case IEEE80211_FTRCTRL_RTSCTS_TPC:
++		REG_RMW_FIELD(ah, AR_TPC, AR_TPC_CTS, val_limit);
++		break;
++	case IEEE80211_FTRCTRL_CHIRP_TPC:
++		REG_RMW_FIELD(ah, AR_TPC, AR_TPC_CHIRP, val_limit);
++		break;
++	case IEEE80211_FTRCTRL_RPT_TPC:
++		REG_RMW_FIELD(ah, AR_TPC, AR_TPC_RPT, val_limit);
++		break;
++	default: ;
++	}
++}
++
++static u32
+ ath9k_get_feature_state(struct ieee80211_hw *hw,
+ 			enum ieee80211_feature_ctrl feature)
+ {
+@@ -2810,6 +2851,11 @@ ath9k_get_feature_state(struct ieee80211
+ 		return (u32)(!(sc->sc_ah->common.disable_ani));
+ 	case IEEE80211_FTRCTRL_TPC:
+ 		return (u32)sc->sc_ah->tpc_enabled;
++	case IEEE80211_FTRCTRL_ACK_TPC:
++	case IEEE80211_FTRCTRL_RTSCTS_TPC:
++	case IEEE80211_FTRCTRL_CHIRP_TPC:
++	case IEEE80211_FTRCTRL_RPT_TPC:
++		return ath9k_get_frame_txpower(sc->sc_ah, feature);
+ 	default:
+ 		return U32_MAX;
+ 	}
+@@ -2837,6 +2883,12 @@ ath9k_set_feature_state(struct ieee80211
+ 			mutex_unlock(&sc->mutex);
+ 		}
+ 		break;
++	case IEEE80211_FTRCTRL_ACK_TPC:
++	case IEEE80211_FTRCTRL_RTSCTS_TPC:
++	case IEEE80211_FTRCTRL_CHIRP_TPC:
++	case IEEE80211_FTRCTRL_RPT_TPC:
++		ath9k_set_frame_txpower(sc->sc_ah, feature, state);
++		break;
+ 	default:
+ 		return -1;
+ 	}
