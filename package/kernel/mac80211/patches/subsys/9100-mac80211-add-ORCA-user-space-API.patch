@@ -698,7 +698,7 @@
  #endif
 --- /dev/null
 +++ b/net/mac80211/orca_uapi.c
-@@ -0,0 +1,1218 @@
+@@ -0,0 +1,1225 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * ORCA - Open-Source Resource Control API
@@ -716,13 +716,16 @@
 +
 +/* IMPORTANT: always change patch version when you make any change here! */
 +#define ORCA_MAJOR_VERSION 2
-+#define ORCA_PATCH_VERSION 5
++#define ORCA_PATCH_VERSION 6
 +
 +extern u8 sample_table[SAMPLE_COLUMNS][MCS_GROUP_RATES];
 +
 +/* IMPORTANT: make sure that the order matches the order of
 + * enum ieee80211_feature_ctrl in mac80211.h ! */
-+static char *feature_pretty[] = { "adaptive_sens", "tpc" };
++static char *feature_pretty[] = {
++	"adaptive_sens", "tpc",
++	"pwr-ack", "pwr-rts", "pwr-chirp", "pwr-rpt"
++};
 +
 +enum api_cmd {
 +	PHY_CMD_START,
@@ -949,7 +952,7 @@
 +	if (!local->ops->get_feature_state || mp->hw->feature_ctrl == 0)
 +		goto skip_ftrs;
 +
-+	seq_printf(s, "ftrs;%u", hweight_long(mp->hw->feature_ctrl));
++	seq_printf(s, "ftrs;%x", hweight_long(mp->hw->feature_ctrl));
 +	for (i = 0; i < NUM_IEEE80211_FTRCTRL; i++) {
 +		u32 state;
 +
@@ -957,7 +960,7 @@
 +			continue;
 +
 +		state = local->ops->get_feature_state(mp->hw, i);
-+		seq_printf(s, ";%s,%u", feature_pretty[i], state);
++		seq_printf(s, ";%s,%x", feature_pretty[i], state);
 +	}
 +	seq_printf(s, "\n");
 +
@@ -1206,6 +1209,10 @@
 +
 +	if (feature == -1)
 +		return -ENOENT;
++
++	/* FIXME: Remove this asap! */
++	if (feature > IEEE80211_FTRCTRL_TPC)
++		allow_str = false;
 +
 +	if (allow_str && !strcmp(arg, "on")) {
 +		state = 1;
