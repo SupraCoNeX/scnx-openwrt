@@ -716,7 +716,7 @@
 +
 +/* IMPORTANT: always change patch version when you make any change here! */
 +#define ORCA_MAJOR_VERSION 2
-+#define ORCA_PATCH_VERSION 7
++#define ORCA_PATCH_VERSION 8
 +
 +extern u8 sample_table[SAMPLE_COLUMNS][MCS_GROUP_RATES];
 +
@@ -725,7 +725,7 @@
 +static char *feature_pretty[] = {
 +	"adaptive_sens", "tpc",
 +	"pwr-ack", "pwr-rts", "pwr-chirp", "pwr-rpt",
-+	"pwr-user"
++	"pwr-user", "force-rr"
 +};
 +
 +enum api_cmd {
