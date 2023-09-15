@@ -1,20 +1,24 @@
 --- a/include/net/mac80211.h
 +++ b/include/net/mac80211.h
-@@ -3724,6 +3724,9 @@ struct ieee80211_prep_tx_info {
+@@ -3724,6 +3724,12 @@ struct ieee80211_prep_tx_info {
   * @IEEE80211_FTRCTRL_RTSCTS_TPC: Control tx power of RTS/CTS frames.
   * @IEEE80211_FTRCTRL_CHIRP_TPC: Control tx power of CHIRP frames.
   * @IEEE80211_FTRCTRL_RPT_TPC: Control tx power of RPT frames.
 + * @IEEE80211_FTRCTRL_USER_POWER: Control the requested power level (in dBm)
 + * 	that is usually set via netlink or statically in the config, i.e.
 + * 	in struct ieee80211_conf->power_level.
++ * @IEEE80211_FTRCTRL_FORCE_RATE_RETRY: mt76-specific feature but can also be
++ * 	used by other drivers if there is some behaviour that alters the MRR
++ * 	chain based on an internal algorithm or similar.
   *
   * @NUM_IEEE80211_FTRCTL: Number of features.
   */
-@@ -3734,6 +3737,7 @@ enum ieee80211_feature_ctrl {
+@@ -3734,6 +3740,8 @@ enum ieee80211_feature_ctrl {
  	IEEE80211_FTRCTRL_RTSCTS_TPC,
  	IEEE80211_FTRCTRL_CHIRP_TPC,
  	IEEE80211_FTRCTRL_RPT_TPC,
 +	IEEE80211_FTRCTRL_USER_POWER,
++	IEEE80211_FTRCTRL_FORCE_RATE_RETRY,
  
  	/* keep last, obviously */
  	NUM_IEEE80211_FTRCTRL,
