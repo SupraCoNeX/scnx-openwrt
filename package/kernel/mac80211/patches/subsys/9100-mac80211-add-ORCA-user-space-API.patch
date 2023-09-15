@@ -698,7 +698,7 @@
  #endif
 --- /dev/null
 +++ b/net/mac80211/orca_uapi.c
-@@ -0,0 +1,1225 @@
+@@ -0,0 +1,1226 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * ORCA - Open-Source Resource Control API
@@ -716,7 +716,7 @@
 +
 +/* IMPORTANT: always change patch version when you make any change here! */
 +#define ORCA_MAJOR_VERSION 2
-+#define ORCA_PATCH_VERSION 6
++#define ORCA_PATCH_VERSION 7
 +
 +extern u8 sample_table[SAMPLE_COLUMNS][MCS_GROUP_RATES];
 +
@@ -724,7 +724,8 @@
 + * enum ieee80211_feature_ctrl in mac80211.h ! */
 +static char *feature_pretty[] = {
 +	"adaptive_sens", "tpc",
-+	"pwr-ack", "pwr-rts", "pwr-chirp", "pwr-rpt"
++	"pwr-ack", "pwr-rts", "pwr-chirp", "pwr-rpt",
++	"pwr-user"
 +};
 +
 +enum api_cmd {
