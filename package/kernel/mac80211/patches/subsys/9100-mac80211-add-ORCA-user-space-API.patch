@@ -177,7 +177,7 @@
  	    !(info->flags & IEEE80211_TX_STAT_AMPDU))
  		return;
  
-+#ifdef CPTCFG_MAC80211_DEBUGFS
++#ifdef CPTCFG_MAC80211_ORCA_UAPI
 +	update_interval = mi->update_interval;
 +#endif
 +
@@ -278,15 +278,15 @@
 -		minstrel_ht_set_rate(mp, mi, rates, i, mi->max_tp_rate[i]);
 -		rates->rate[i].txpower_idx = -1;
 -	}
-+	manual_rc = orca_sta_rc_manual_mode(mi) && !force;
-+	manual_tpc = orca_sta_tpc_manual_mode(mi) && !force;
- 
+-
 -	if (i < max_rates) {
 -		minstrel_ht_set_rate(mp, mi, rates, i, mi->max_prob_rate);
 -		rates->rate[i].txpower_idx = -1;
 -		i++;
 -	}
--
++	manual_rc = orca_sta_rc_manual_mode(mi) && !force;
++	manual_tpc = orca_sta_tpc_manual_mode(mi) && !force;
+ 
 -	if (i < IEEE80211_TX_RATE_TABLE_SIZE)
 -		rates->rate[i].idx = -1;
 +	if (manual_rc) {
@@ -423,7 +423,7 @@
  }
  
  static void
-@@ -1831,12 +1904,29 @@ minstrel_ht_alloc_sta(void *priv, struct
+@@ -1831,12 +1904,27 @@ minstrel_ht_alloc_sta(void *priv, struct
  			max_rates = sband->n_bitrates;
  	}
  
@@ -431,12 +431,10 @@
 +	mi = kzalloc(sizeof(*mi), gfp);
 +	spin_lock_init(&mi->lock);
 +
-+#ifdef CPTCFG_MAC80211_DEBUGFS
++#ifdef CPTCFG_MAC80211_ORCA_UAPI
 +	mi->update_interval = MINSTREL_UPDATE_INTERVAL;
 +	mi->sample_interval = MINSTREL_SAMPLE_INTERVAL;
-+#endif
 +
-+#ifdef CPTCFG_MAC80211_ORCA_UAPI
 +	INIT_LIST_HEAD(&mi->list);
 +	mi->ratetbl = kzalloc(sizeof(*mi->ratetbl), gfp);
 +	mi->user_sample_rate = -1;
@@ -454,7 +452,7 @@
  	kfree(priv_sta);
  }
  
-@@ -1926,7 +2016,6 @@ minstrel_ht_alloc(struct ieee80211_hw *h
+@@ -1926,7 +2014,6 @@ minstrel_ht_alloc(struct ieee80211_hw *h
  		mp->max_retry = 7;
  
  	mp->hw = hw;
@@ -462,7 +460,7 @@
  
  	minstrel_ht_init_cck_rates(mp);
  	for (i = 0; i < ARRAY_SIZE(mp->hw->wiphy->bands); i++)
-@@ -1936,6 +2025,7 @@ minstrel_ht_alloc(struct ieee80211_hw *h
+@@ -1936,6 +2023,7 @@ minstrel_ht_alloc(struct ieee80211_hw *h
  }
  
  #ifdef CPTCFG_MAC80211_DEBUGFS
@@ -470,7 +468,7 @@
  static void minstrel_ht_add_debugfs(struct ieee80211_hw *hw, void *priv,
  				    struct dentry *debugfsdir)
  {
-@@ -1944,12 +2034,15 @@ static void minstrel_ht_add_debugfs(stru
+@@ -1944,12 +2032,15 @@ static void minstrel_ht_add_debugfs(stru
  	mp->fixed_rate_idx = (u32) -1;
  	debugfs_create_u32("fixed_rate_idx", S_IRUGO | S_IWUGO, debugfsdir,
  			   &mp->fixed_rate_idx);
@@ -539,20 +537,19 @@
  
  	/* ampdu length (average, per sampling interval) */
  	unsigned int ampdu_len;
-@@ -193,10 +211,151 @@ struct minstrel_ht_sta {
+@@ -193,10 +211,150 @@ struct minstrel_ht_sta {
  
  	/* MCS rate group info and statistics */
  	struct minstrel_mcs_group_data groups[MINSTREL_GROUPS_NB];
 +
-+#ifdef CPTCFG_MAC80211_DEBUGFS
-+	unsigned int update_interval;
-+	unsigned int sample_interval;
-+#endif
 +#ifdef CPTCFG_MAC80211_ORCA_UAPI
 +	struct ieee80211_sta_rates *ratetbl;
 +	u32 user_sample_rate;
 +	s16 user_sample_txpower;
 +	u8 user_sample_count;
++
++	unsigned int update_interval;
++	unsigned int sample_interval;
 +
 +	bool rc_manual;
 +	bool tpc_manual;
@@ -1952,52 +1949,3 @@
 +
 +	spin_unlock_bh(&mp->relay_lock);
 +}
---- a/net/mac80211/rc80211_minstrel_ht_debugfs.c
-+++ b/net/mac80211/rc80211_minstrel_ht_debugfs.c
-@@ -326,11 +326,44 @@ static const struct file_operations mins
- 	.llseek = no_llseek,
- };
- 
-+static int minstrel_ht_freq_get(void *data, u64 *val) {
-+	unsigned int jiff_intvl = *(unsigned int*)data;
-+	u64 intvl = 0;
-+
-+	if (jiff_intvl)
-+		intvl = HZ / jiff_intvl;
-+
-+	*val = intvl;
-+	return 0;
-+}
-+
-+static int minstrel_ht_freq_set(void *data, u64 val) {
-+	unsigned int *jiff_intvl = (unsigned int*)data;
-+
-+	if (!val || val > HZ)
-+		return -ERANGE;
-+
-+	*jiff_intvl = HZ / (unsigned int)val;
-+
-+	return 0;
-+}
-+
-+DEFINE_DEBUGFS_ATTRIBUTE(minstrel_ht_freq_fops, minstrel_ht_freq_get,
-+			 minstrel_ht_freq_set, "%lld\n");
-+
- void
- minstrel_ht_add_sta_debugfs(void *priv, void *priv_sta, struct dentry *dir)
- {
--	debugfs_create_file("rc_stats", 0444, dir, priv_sta,
-+	struct minstrel_ht_sta *mi = priv_sta;
-+
-+	debugfs_create_file("rc_stats", 0444, dir, mi,
- 			    &minstrel_ht_stat_fops);
--	debugfs_create_file("rc_stats_csv", 0444, dir, priv_sta,
-+	debugfs_create_file("rc_stats_csv", 0444, dir, mi,
- 			    &minstrel_ht_stat_csv_fops);
-+
-+	/* update and sampling frequency in Hertz */
-+	debugfs_create_file("update_freq", 0666, dir, &mi->update_interval,
-+			    &minstrel_ht_freq_fops);
-+	debugfs_create_file("sampling_freq", 0666, dir, &mi->sample_interval,
-+			    &minstrel_ht_freq_fops);
- }
