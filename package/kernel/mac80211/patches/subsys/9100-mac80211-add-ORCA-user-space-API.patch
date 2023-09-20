@@ -1975,7 +1975,7 @@
 +	if (!val || val > HZ)
 +		return -ERANGE;
 +
-+	*jiff_intvl = HZ / val;
++	*jiff_intvl = HZ / (unsigned int)val;
 +
 +	return 0;
 +}
