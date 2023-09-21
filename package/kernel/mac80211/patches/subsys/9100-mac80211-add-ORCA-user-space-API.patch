@@ -690,7 +690,7 @@
  #endif
 --- /dev/null
 +++ b/net/mac80211/orca_uapi.c
-@@ -0,0 +1,1258 @@
+@@ -0,0 +1,1255 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * ORCA - Open-Source Resource Control API
@@ -708,7 +708,7 @@
 +
 +/* IMPORTANT: always change patch version when you make any change here! */
 +#define ORCA_MAJOR_VERSION 2
-+#define ORCA_PATCH_VERSION 9
++#define ORCA_PATCH_VERSION 10
 +
 +extern u8 sample_table[SAMPLE_COLUMNS][MCS_GROUP_RATES];
 +
@@ -1255,9 +1255,6 @@
 +		mi->ratetbl->rate[i].count_rts = 0;
 +		mi->ratetbl->rate[i].count_cts = 0;
 +	}
-+
-+	if (mi->rc_manual)
-+		return 0;
 +
 +	if (update_freq_str) {
 +		if (kstrtou16(update_freq_str, 16, &update_freq))
