@@ -690,7 +690,7 @@
  #endif
 --- /dev/null
 +++ b/net/mac80211/orca_uapi.c
-@@ -0,0 +1,1255 @@
+@@ -0,0 +1,1265 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * ORCA - Open-Source Resource Control API
@@ -708,7 +708,7 @@
 +
 +/* IMPORTANT: always change patch version when you make any change here! */
 +#define ORCA_MAJOR_VERSION 2
-+#define ORCA_PATCH_VERSION 10
++#define ORCA_PATCH_VERSION 11
 +
 +extern u8 sample_table[SAMPLE_COLUMNS][MCS_GROUP_RATES];
 +
@@ -875,6 +875,40 @@
 +}
 +
 +static int
++__orca_dump_sta(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
++		char *buf, unsigned int buf_size, const char *type)
++{
++	struct sta_info *sta_info;
++	int i, ofs = 0;
++
++	sta_info = container_of(mi->sta, struct sta_info, sta);
++
++	if (!type)
++		ofs = scnprintf(buf, buf_size, "sta;");
++	else
++		ofs = scnprintf(buf, buf_size, "%llx;sta;%s;",
++				(unsigned long long)ktime_get_real_fast_ns(),
++				type);
++
++	ofs += scnprintf(buf + ofs, buf_size - ofs,
++			 "%pM;%s;%s;%s;%x;%x;%x;%x",
++			 mi->sta->addr, sta_info->sdata->name,
++			 mi->rc_manual ? "manual" : "auto",
++			 mi->tpc_manual ? "manual" : "auto",
++			 mi->overhead, mi->overhead_legacy,
++			 HZ / mi->update_interval,
++			 HZ / mi->sample_interval);
++
++	for (i = 0; i < MINSTREL_GROUPS_NB; i++)
++		ofs += scnprintf(buf + ofs, buf_size - ofs, ";%x",
++				 mi->supported[i]);
++
++	ofs += scnprintf(buf + ofs, buf_size - ofs, "\n");
++	return ofs;
++}
++
++
++static int
 +orca_read_phy_info(struct seq_file *s, void *data)
 +{
 +	struct wiphy *wiphy = container_of(s->private, struct wiphy, dev);
@@ -884,8 +918,7 @@
 +	struct minstrel_priv *mp = local->rate_ctrl->priv;
 +	struct minstrel_ht_sta *mi;
 +	char tmp[64] = {};
-+	int len, ofs = 0;
-+	int power_limit, i = 0;
++	int i, power_limit, len, ofs = 0;
 +
 +	seq_printf(s, "drv;%s\n", wiphy_dev(wiphy)->driver->name);
 +
@@ -921,8 +954,8 @@
 +skip_tpc:
 +	if (local->ops->get_txpower) {
 +		if (!local->ops->get_txpower(&local->hw, NULL, &power_limit))
-+			/* double it, it's better for ath9k and driver using
-+			 * get_txpower use 0.5 dBm steps anyway */
++			/* use 0.5 dBm steps, ath9k and other drivers
++			 * implementing get_txpower use that anyway */
 +			seq_printf(s, "pwr_limit;%x\n", power_limit * 2);
 +	}
 +
@@ -962,107 +995,30 @@
 +	/* keep this block last! */
 +	rcu_read_lock();
 +	list_for_each_entry_rcu(mi, &mp->stations, list) {
-+		sta_info = container_of(mi->sta, struct sta_info, sta);
-+		seq_printf(s, "sta;%pM;%s;%s;%s;%x;%x;%x;%x",
-+			   mi->sta->addr, sta_info->sdata->name,
-+			   mi->rc_manual ? "manual" : "auto",
-+			   mi->tpc_manual ? "manual" : "auto",
-+			   mi->overhead, mi->overhead_legacy,
-+			   HZ / mi->update_interval,
-+			   HZ / mi->sample_interval);
++		char *buf;
++		int count, size;
 +
-+		for (i = 0; i < MINSTREL_GROUPS_NB; i++)
-+			seq_printf(s, ";%x", mi->supported[i]);
-+
-+		seq_printf(s, "\n");
++		size = seq_get_buf(s, &buf);
++		count = __orca_dump_sta(mp, mi, buf, size, NULL);
++		seq_commit(s, count);
 +	}
 +	rcu_read_unlock();
 +
 +	return 0;
 +}
 +
-+static struct dentry *
-+create_buf_file_cb(const char *filename, struct dentry *parent, umode_t mode,
-+		   struct rchan_buf *buf, int *is_global)
-+{
-+	struct dentry *f;
-+
-+	f = debugfs_create_file("api_event", mode, parent, buf,
-+				&relay_file_operations);
-+	if (IS_ERR(f))
-+		return NULL;
-+
-+	*is_global = 1;
-+
-+	return f;
-+}
-+
-+static int
-+remove_buf_file_cb(struct dentry *f)
-+{
-+	debugfs_remove(f);
-+
-+	return 0;
-+}
-+
-+static struct rchan_callbacks relay_ev_cb = {
-+	.create_buf_file = create_buf_file_cb,
-+	.remove_buf_file = remove_buf_file_cb,
-+};
-+
 +static void
 +orca_dump_sta(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
 +	      const char *type)
 +{
-+	struct sta_info *sta_info;
++	/* see __orca_dump_sta for that size */
 +	char info[128 + MINSTREL_GROUPS_NB * 4];
-+	int ofs = 0;
-+	int i;
++	int count;
 +
-+	sta_info = container_of(mi->sta, struct sta_info, sta);
-+	ofs += scnprintf(info + ofs, sizeof(info) - ofs,
-+			 "%llx;sta;%s;%pM;%s;%s;%s;%x;%x;%x;%x",
-+			 (unsigned long long)ktime_get_real_fast_ns(), type,
-+			 mi->sta->addr, sta_info->sdata->name,
-+			 mi->rc_manual ? "manual" : "auto",
-+			 mi->tpc_manual ? "manual" : "auto",
-+			 mi->overhead, mi->overhead_legacy,
-+			 HZ / mi->update_interval,
-+			 HZ / mi->sample_interval);
++	count = __orca_dump_sta(mp, mi, info, sizeof(info), type);
 +
-+	for (i = 0; i < MINSTREL_GROUPS_NB; i++)
-+		ofs += scnprintf(info + ofs, sizeof(info) - ofs, ";%x",
-+				 mi->supported[i]);
-+
-+	ofs += scnprintf(info + ofs, sizeof(info) - ofs, "\n");
-+
-+	relay_write(mp->relay_ev, info, ofs);
++	relay_write(mp->relay_ev, info, count);
 +	relay_flush(mp->relay_ev);
-+}
-+
-+void __orca_report_sample_rates(struct minstrel_priv *mp,
-+				struct minstrel_ht_sta *mi)
-+{
-+	char line[128];
-+	int i, j, ofs;
-+
-+	ofs = scnprintf(line, sizeof(line), "%llx;sample_rates;%pM",
-+			(unsigned long long)ktime_get_real_fast_ns(),
-+			mi->sta->addr);
-+
-+	for (i = 0; i < __MINSTREL_SAMPLE_TYPE_MAX; i++)
-+		for (j = 0; j < MINSTREL_SAMPLE_RATES; j++)
-+			ofs += scnprintf(line + ofs, sizeof(line), ";%x",
-+					 mi->sample[i].cur_sample_rates[j]);
-+
-+	ofs += scnprintf(line + ofs, sizeof(line), "\n");
-+
-+	spin_lock_bh(&mp->relay_lock);
-+
-+	relay_write(mp->relay_ev, line, ofs);
-+	relay_flush(mp->relay_ev);
-+
-+	spin_unlock_bh(&mp->relay_lock);
 +}
 +
 +static void
@@ -1654,7 +1610,7 @@
 +		       char* cmd_str, char *args)
 +{
 +	char buf[128];
-+	int err = 0, len;
++	int err, len;
 +
 +	/* Store command with timestamp, args may be modified later */
 +	len = scnprintf(buf, sizeof(buf), "%llx;%s",
@@ -1686,8 +1642,7 @@
 +{
 +	struct minstrel_priv *mp = file->private_data;
 +	enum api_cmd cmd;
-+	char *pos, *cur;
-+	char buf[96];
++	char buf[96], *pos, *cur;
 +	size_t len = count;
 +	int err;
 +	bool echo = true;
@@ -1895,7 +1850,8 @@
 +	spin_unlock_bh(&mp->relay_lock);
 +}
 +
-+void __orca_report_best_rates(struct minstrel_priv *mp, struct minstrel_ht_sta *mi)
++void __orca_report_best_rates(struct minstrel_priv *mp,
++			      struct minstrel_ht_sta *mi)
 +{
 +	char line[128];
 +	int i, ofs;
@@ -1916,6 +1872,60 @@
 +
 +	spin_unlock_bh(&mp->relay_lock);
 +}
++
++void __orca_report_sample_rates(struct minstrel_priv *mp,
++				struct minstrel_ht_sta *mi)
++{
++	char line[128];
++	int i, j, ofs;
++
++	ofs = scnprintf(line, sizeof(line), "%llx;sample_rates;%pM",
++			(unsigned long long)ktime_get_real_fast_ns(),
++			mi->sta->addr);
++
++	for (i = 0; i < __MINSTREL_SAMPLE_TYPE_MAX; i++)
++		for (j = 0; j < MINSTREL_SAMPLE_RATES; j++)
++			ofs += scnprintf(line + ofs, sizeof(line), ";%x",
++					 mi->sample[i].cur_sample_rates[j]);
++
++	ofs += scnprintf(line + ofs, sizeof(line), "\n");
++
++	spin_lock_bh(&mp->relay_lock);
++
++	relay_write(mp->relay_ev, line, ofs);
++	relay_flush(mp->relay_ev);
++
++	spin_unlock_bh(&mp->relay_lock);
++}
++
++static struct dentry *
++create_buf_file_cb(const char *filename, struct dentry *parent, umode_t mode,
++		   struct rchan_buf *buf, int *is_global)
++{
++	struct dentry *f;
++
++	f = debugfs_create_file("api_event", mode, parent, buf,
++				&relay_file_operations);
++	if (IS_ERR(f))
++		return NULL;
++
++	*is_global = 1;
++
++	return f;
++}
++
++static int
++remove_buf_file_cb(struct dentry *f)
++{
++	debugfs_remove(f);
++
++	return 0;
++}
++
++static struct rchan_callbacks relay_ev_cb = {
++	.create_buf_file = create_buf_file_cb,
++	.remove_buf_file = remove_buf_file_cb,
++};
 +
 +void orca_add_debugfs_api(struct ieee80211_hw *hw, void *priv, struct dentry *dir)
 +{
