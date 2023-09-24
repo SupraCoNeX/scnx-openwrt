@@ -690,7 +690,7 @@
  #endif
 --- /dev/null
 +++ b/net/mac80211/orca_uapi.c
-@@ -0,0 +1,1265 @@
+@@ -0,0 +1,1266 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * ORCA - Open-Source Resource Control API
@@ -708,7 +708,7 @@
 +
 +/* IMPORTANT: always change patch version when you make any change here! */
 +#define ORCA_MAJOR_VERSION 2
-+#define ORCA_PATCH_VERSION 11
++#define ORCA_PATCH_VERSION 12
 +
 +extern u8 sample_table[SAMPLE_COLUMNS][MCS_GROUP_RATES];
 +
@@ -1547,20 +1547,21 @@
 +		list_for_each_entry_rcu(mi, &mp->stations, list) {
 +			ret = orca_sta_set_rc_mode(mi, args[0], args[1], args[2]);
 +			if (ret)
-+				return ret;
++				goto out;
 +		}
 +		break;
 +	case STA_CMD_TPC_MODE:
 +		list_for_each_entry_rcu(mi, &mp->stations, list) {
 +			ret = orca_sta_set_tpc_mode(mp, mi, args[0]);
 +			if (ret)
-+				return ret;
++				goto out;
 +		}
 +		break;
 +	default:
 +		ret = -EPERM;
 +	}
 +
++out:
 +	rcu_read_unlock();
 +	return ret;
 +}
