@@ -690,7 +690,7 @@
  #endif
 --- /dev/null
 +++ b/net/mac80211/orca_uapi.c
-@@ -0,0 +1,1266 @@
+@@ -0,0 +1,1251 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * ORCA - Open-Source Resource Control API
@@ -708,7 +708,7 @@
 +
 +/* IMPORTANT: always change patch version when you make any change here! */
 +#define ORCA_MAJOR_VERSION 2
-+#define ORCA_PATCH_VERSION 12
++#define ORCA_PATCH_VERSION 13
 +
 +extern u8 sample_table[SAMPLE_COLUMNS][MCS_GROUP_RATES];
 +
@@ -1136,11 +1136,9 @@
 +	struct ieee80211_local *local = hw_to_local(mp->hw);
 +	enum ieee80211_feature_ctrl feature = -1;
 +	char *feature_str, *arg;
-+	u32 state;
 +	int i, res;
-+	bool allow_str = true;
++	u32 state;
 +
-+	/* We need at least the feature name and one argument */
 +	feature_str = strsep(&args, ";");
 +	arg = strsep(&args, ";");
 +	if (!feature_str || !arg)
@@ -1161,20 +1159,9 @@
 +	if (feature == -1)
 +		return -ENOENT;
 +
-+	/* FIXME: Remove this asap! */
-+	if (feature > IEEE80211_FTRCTRL_TPC)
-+		allow_str = false;
++	if (kstrtou32(arg, 16, &state) || state == U32_MAX)
++		return -EINVAL;
 +
-+	if (allow_str && !strcmp(arg, "on")) {
-+		state = 1;
-+	} else if (allow_str && !strcmp(arg, "off")) {
-+		state = 0;
-+	} else {
-+		if (kstrtou32(arg, 16, &state) || state == U32_MAX)
-+			return -EINVAL;
-+	}
-+
-+	/* Check if the hardware/driver supports the given feature ctrl */
 +	if (!ieee80211_feature_ctrl_has(mp->hw, feature))
 +		return -EPERM;
 +
@@ -1398,8 +1385,8 @@
 +}
 +
 +static int
-+orca_ratetbl_set_txpower(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
-+			 char *txpwr_str, int stage, s16 max_power)
++orca_ratetbl_set_txpower(struct minstrel_ht_sta *mi, char *txpwr_str,
++			 int stage, s16 max_power)
 +{
 +	u16 raw;
 +	s16 txpwr;
@@ -1421,7 +1408,7 @@
 +{
 +	struct ieee80211_sta_rates *ratetbl;
 +	int i, err = 0;
-+	s16 max_tx_power;
++	s16 max_txpwr;
 +	bool rc, tpc;
 +
 +	if (!args_str || !n_args)
@@ -1435,21 +1422,21 @@
 +		return -EPERM;
 +
 +	if (tpc)
-+		max_tx_power = ieee80211_hw_get_max_txpower_idx(mp->hw);
++		max_txpwr = ieee80211_hw_get_max_txpower_idx(mp->hw);
 +
-+	for (i = 0; i < min_t(unsigned int, n_args, ARRAY_SIZE(ratetbl->rate)); i++) {
++	for (i = 0; i < min(n_args, ARRAY_SIZE(ratetbl->rate)); i++) {
 +		if (rc) {
 +			err = orca_ratetbl_set_rate_count(mp, mi, &args_str[i], i);
 +			if (err)
 +				return err;
 +		}
 +
-+		if (tpc) {
-+			err = orca_ratetbl_set_txpower(mp, mi, args_str[i], i,
-+						       max_tx_power);
-+			if (err)
-+				return err;
-+		}
++		if (!tpc)
++			continue;
++
++		err = orca_ratetbl_set_txpower(mi, args_str[i], i, max_txpwr);
++		if (err)
++			return err;
 +	}
 +	if (!i)
 +		return -EINVAL;
@@ -1470,15 +1457,13 @@
 +	mi->ampdu_len = 0;
 +	mi->ampdu_packets = 0;
 +	mi->avg_ampdu_len = MINSTREL_FRAC(1, 1);
-+	memset(&mi->max_tp_rate, 0, sizeof(u16) * MAX_THR_RATES);
++	memset(&mi->max_tp_rate, 0, sizeof(mi->max_tp_rate));
 +	mi->max_prob_rate = 0;
 +	mi->total_packets = 0;
 +	mi->sample_packets = 0;
 +	mi->sample_rate = 0;
-+	memset(&mi->sample, 0, sizeof(struct minstrel_sample_category) *
-+			       __MINSTREL_SAMPLE_TYPE_MAX);
-+	memset(&mi->groups, 0, sizeof(struct minstrel_mcs_group_data) *
-+			       MINSTREL_GROUPS_NB);
++	memset(&mi->sample, 0, sizeof(mi->sample));
++	memset(&mi->groups, 0, sizeof(mi->groups));
 +
 +	minstrel_ht_update_stats(mp, mi);
 +}
