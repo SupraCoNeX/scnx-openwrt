@@ -690,7 +690,7 @@
  #endif
 --- /dev/null
 +++ b/net/mac80211/orca_uapi.c
-@@ -0,0 +1,1251 @@
+@@ -0,0 +1,1246 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * ORCA - Open-Source Resource Control API
@@ -914,7 +914,6 @@
 +	struct wiphy *wiphy = container_of(s->private, struct wiphy, dev);
 +	struct ieee80211_local *local = wiphy_priv(wiphy);
 +	struct ieee80211_sub_if_data *sdata;
-+	struct sta_info *sta_info;
 +	struct minstrel_priv *mp = local->rate_ctrl->priv;
 +	struct minstrel_ht_sta *mi;
 +	char tmp[64] = {};
@@ -1036,6 +1035,25 @@
 +	rcu_read_unlock();
 +}
 +
++static int
++orca_get_args(char **dest, int dest_size, char *str, char *sep)
++{
++	int i, n;
++
++	for (i = 0, n = 0; i < dest_size; i++) {
++		if (!str) {
++			dest[i] = NULL;
++			continue;
++		}
++
++		dest[i] = strsep(&str, sep);
++		if (dest[i])
++			n++;
++	}
++
++	return n;
++}
++
 +static void
 +orca_start_monitoring(struct minstrel_priv *mp, char *params)
 +{
@@ -1131,17 +1149,16 @@
 +}
 +
 +static int
-+orca_phy_set_feature(struct minstrel_priv *mp, char *args)
++orca_phy_set_feature(struct minstrel_priv *mp, char *arg_str)
 +{
 +	struct ieee80211_local *local = hw_to_local(mp->hw);
 +	enum ieee80211_feature_ctrl feature = -1;
-+	char *feature_str, *arg;
++	char *args[2];
 +	int i, res;
 +	u32 state;
 +
-+	feature_str = strsep(&args, ";");
-+	arg = strsep(&args, ";");
-+	if (!feature_str || !arg)
++	orca_get_args(args, ARRAY_SIZE(args), arg_str, ";");
++	if (!args[0] || !args[1])
 +		return -EINVAL;
 +
 +	if (!local->ops->set_feature_state)
@@ -1150,7 +1167,7 @@
 +	/* This only works if feature_pretty and enum ieee80211_feature_ctrl
 +	 * (in mac80211.h) are equally ordered! */
 +	for (i = 0; i < ARRAY_SIZE(feature_pretty); i++) {
-+		if (!strcmp(feature_str, feature_pretty[i])) {
++		if (!strcmp(args[0], feature_pretty[i])) {
 +			feature = i;
 +			break;
 +		}
@@ -1159,7 +1176,7 @@
 +	if (feature == -1)
 +		return -ENOENT;
 +
-+	if (kstrtou32(arg, 16, &state) || state == U32_MAX)
++	if (kstrtou32(args[1], 16, &state) || state == U32_MAX)
 +		return -EINVAL;
 +
 +	if (!ieee80211_feature_ctrl_has(mp->hw, feature))
@@ -1263,25 +1280,6 @@
 +	return mi;
 +}
 +
-+static int
-+orca_get_args(char **dest, int dest_size, char *str, char *sep)
-+{
-+	int i, n;
-+
-+	for (i = 0, n = 0; i < dest_size; i++) {
-+		if (!str) {
-+			dest[i] = NULL;
-+			continue;
-+		}
-+
-+		dest[i] = strsep(&str, sep);
-+		if (dest[i])
-+			n++;
-+	}
-+
-+	return n;
-+}
-+
 +static bool
 +orca_is_valid_rate(struct minstrel_ht_sta *mi, u32 rate)
 +{
@@ -1314,7 +1312,7 @@
 +orca_set_probe(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
 +	       char *arg_str)
 +{
-+	char *rate_str, *count_str, *txpwr_str;
++	char *args[3];
 +	unsigned int count;
 +	int rate;
 +	u16 raw_txpwr;
@@ -1325,23 +1323,21 @@
 +	if (!mi->rc_manual)
 +		return -EPERM;
 +
-+	txpwr_str = arg_str;
-+	rate_str = strsep(&txpwr_str, ",");
-+	count_str = strsep(&txpwr_str, ",");
++	orca_get_args(args, ARRAY_SIZE(args), arg_str, ",");
 +
-+	rate = orca_rate_from_str(mi, rate_str);
++	rate = orca_rate_from_str(mi, args[0]);
 +	if (rate < 0)
 +		return rate;
 +
-+	if (!count_str || kstrtouint(count_str, 16, &count))
++	if (!args[1] || kstrtouint(args[1], 16, &count))
 +		return -EINVAL;
 +
-+	if (txpwr_str) {
++	if (args[2]) {
 +		if (!mi->tpc_manual)
 +			return -EPERM;
 +
 +		max_power = ieee80211_hw_get_max_txpower_idx(mp->hw);
-+		if (kstrtou16(txpwr_str, 16, &raw_txpwr))
++		if (kstrtou16(args[2], 16, &raw_txpwr))
 +			return -EINVAL;
 +
 +		txpwr = (raw_txpwr <= S16_MAX) ? (s16)raw_txpwr : -1;
@@ -1357,14 +1353,10 @@
 +
 +static int
 +orca_ratetbl_set_rate_count(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
-+			    char **rate_count_str, unsigned int stage)
++			    char *rate_str, char *count_str, unsigned int stage)
 +{
-+	char *rate_str, *count_str;
 +	unsigned int count;
 +	int rate;
-+
-+	rate_str = strsep(rate_count_str, ",");
-+	count_str = strsep(rate_count_str, ",");
 +
 +	if (!rate_str || !count_str)
 +		return -EINVAL;
@@ -1406,7 +1398,7 @@
 +orca_set_ratetbl(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
 +		 enum api_cmd cmd, char **args_str, unsigned int n_args)
 +{
-+	struct ieee80211_sta_rates *ratetbl;
++	char *stage[3];
 +	int i, err = 0;
 +	s16 max_txpwr;
 +	bool rc, tpc;
@@ -1424,9 +1416,12 @@
 +	if (tpc)
 +		max_txpwr = ieee80211_hw_get_max_txpower_idx(mp->hw);
 +
-+	for (i = 0; i < min(n_args, ARRAY_SIZE(ratetbl->rate)); i++) {
++	for (i = 0; i < min_t(unsigned int, n_args, ARRAY_SIZE(mi->ratetbl->rate)); i++) {
++		orca_get_args(stage, ARRAY_SIZE(stage), args_str[i], ",");
++
 +		if (rc) {
-+			err = orca_ratetbl_set_rate_count(mp, mi, &args_str[i], i);
++			err = orca_ratetbl_set_rate_count(mp, mi, stage[0],
++							  stage[1], i);
 +			if (err)
 +				return err;
 +		}
@@ -1434,14 +1429,14 @@
 +		if (!tpc)
 +			continue;
 +
-+		err = orca_ratetbl_set_txpower(mi, args_str[i], i, max_txpwr);
++		err = orca_ratetbl_set_txpower(mi, stage[2], i, max_txpwr);
 +		if (err)
 +			return err;
 +	}
 +	if (!i)
 +		return -EINVAL;
 +
-+	for (; i < ARRAY_SIZE(ratetbl->rate); i++) {
++	for (; i < ARRAY_SIZE(mi->ratetbl->rate); i++) {
 +		mi->ratetbl->rate[i].idx = -1;
 +		mi->ratetbl->rate[i].count = 0;
 +		mi->ratetbl->rate[i].txpower_idx = -1;
