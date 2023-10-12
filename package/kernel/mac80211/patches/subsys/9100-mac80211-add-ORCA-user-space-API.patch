@@ -690,7 +690,7 @@
  #endif
 --- /dev/null
 +++ b/net/mac80211/orca_uapi.c
-@@ -0,0 +1,1252 @@
+@@ -0,0 +1,1251 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * ORCA - Open-Source Resource Control API
@@ -713,7 +713,7 @@
 + */
 +#define ORCA_MAJOR_VERSION 2
 +#define ORCA_MINOR_VERSION 0
-+#define ORCA_PATCH_VERSION 14
++#define ORCA_PATCH_VERSION 15
 +
 +extern u8 sample_table[SAMPLE_COLUMNS][MCS_GROUP_RATES];
 +
@@ -773,7 +773,7 @@
 +	        seq_printf(s, ";airtime%d", i);
 +        seq_printf(s, "\n");
 +
-+	seq_printf(s, "#sta;action;macaddr;iface;rc_mode;tpc_mode;overhead_mcs;overhead_legacy");
++	seq_printf(s, "#sta;action;macaddr;iface;rc_mode;tpc_mode;overhead_mcs;overhead_legacy;update_freq;sample_freq");
 +	for (i = 0; i < MINSTREL_GROUPS_NB; i++)
 +	        seq_printf(s, ";mcs%d", i);
 +	seq_printf(s, "\n");
@@ -809,8 +809,8 @@
 +		seq_printf(s, ";column%d", i);
 +	seq_printf(s, "\n");
 +
-+	seq_printf(s, "#start;txs;rxs;stats;sta;tprc_echo\n");
-+	seq_printf(s, "#stop;txs;rxs;stats;sta;tprc_echo\n");
++	seq_printf(s, "#start;txs;rxs;stats;tprc_echo\n");
++	seq_printf(s, "#stop;txs;rxs;stats;tprc_echo\n");
 +
 +	seq_printf(s, "#set_rates;macaddr");
 +	for (i = 0; i < IEEE80211_TX_MAX_RATES; i++)
@@ -835,9 +835,8 @@
 +	 * future STAs. For 'rc_mode' and 'tpc_mode', an STA is by default in
 +	 * 'auto' mode after connecting.
 +	 */
-+	seq_printf(s, "#rc_mode;macaddr;mode\n");
-+	seq_printf(s, "#rc_mode;all;mode\n");
 +	seq_printf(s, "#rc_mode;macaddr;mode;update_freq;sample_freq\n");
++	seq_printf(s, "#rc_mode;all;mode;update_freq;sample_freq\n");
 +	seq_printf(s, "#tpc_mode;macaddr;mode\n");
 +	seq_printf(s, "#tpc_mode;all;mode\n");
 +
