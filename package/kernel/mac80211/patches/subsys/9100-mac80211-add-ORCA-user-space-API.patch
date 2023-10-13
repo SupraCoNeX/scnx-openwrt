@@ -690,7 +690,7 @@
  #endif
 --- /dev/null
 +++ b/net/mac80211/orca_uapi.c
-@@ -0,0 +1,1251 @@
+@@ -0,0 +1,1255 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * ORCA - Open-Source Resource Control API
@@ -713,7 +713,7 @@
 + */
 +#define ORCA_MAJOR_VERSION 2
 +#define ORCA_MINOR_VERSION 0
-+#define ORCA_PATCH_VERSION 15
++#define ORCA_PATCH_VERSION 16
 +
 +extern u8 sample_table[SAMPLE_COLUMNS][MCS_GROUP_RATES];
 +
@@ -1422,6 +1422,8 @@
 +		max_txpwr = ieee80211_hw_get_max_txpower_idx(mp->hw);
 +
 +	for (i = 0; i < min_t(unsigned int, n_args, ARRAY_SIZE(mi->ratetbl->rate)); i++) {
++		int j = 0;
++
 +		orca_get_args(stage, ARRAY_SIZE(stage), args_str[i], ",");
 +
 +		if (rc) {
@@ -1429,12 +1431,14 @@
 +							  stage[1], i);
 +			if (err)
 +				return err;
++
++			j = 2;
 +		}
 +
 +		if (!tpc)
 +			continue;
 +
-+		err = orca_ratetbl_set_txpower(mi, stage[2], i, max_txpwr);
++		err = orca_ratetbl_set_txpower(mi, stage[j], i, max_txpwr);
 +		if (err)
 +			return err;
 +	}
