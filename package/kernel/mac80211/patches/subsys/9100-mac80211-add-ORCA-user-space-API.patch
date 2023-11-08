@@ -249,7 +249,7 @@
  minstrel_ht_set_rate(struct minstrel_priv *mp, struct minstrel_ht_sta *mi,
                       struct ieee80211_sta_rates *ratetbl, int offset, int index)
  {
-@@ -1505,39 +1532,57 @@ minstrel_ht_get_max_amsdu_len(struct min
+@@ -1505,39 +1532,55 @@ minstrel_ht_get_max_amsdu_len(struct min
  	return 0;
  }
  
@@ -278,17 +278,14 @@
 -		minstrel_ht_set_rate(mp, mi, rates, i, mi->max_tp_rate[i]);
 -		rates->rate[i].txpower_idx = -1;
 -	}
--
++	manual_rc = orca_sta_rc_manual_mode(mi) && !force;
++	manual_tpc = orca_sta_tpc_manual_mode(mi) && !force;
+ 
 -	if (i < max_rates) {
 -		minstrel_ht_set_rate(mp, mi, rates, i, mi->max_prob_rate);
 -		rates->rate[i].txpower_idx = -1;
 -		i++;
 -	}
-+	manual_rc = orca_sta_rc_manual_mode(mi) && !force;
-+	manual_tpc = orca_sta_tpc_manual_mode(mi) && !force;
- 
--	if (i < IEEE80211_TX_RATE_TABLE_SIZE)
--		rates->rate[i].idx = -1;
 +	if (manual_rc) {
 +		if (mi->ratetbl->rate[0].idx >= 0) {
 +			memcpy(rates, mi->ratetbl, sizeof(*rates));
@@ -301,25 +298,25 @@
 +		/* Start with max_tp_rate[0] */
 +		minstrel_ht_set_rate(mp, mi, rates, i++, mi->max_tp_rate[0]);
  
--	mi->sta->deflink.agg.max_rc_amsdu_len = minstrel_ht_get_max_amsdu_len(mi);
--	ieee80211_sta_recalc_aggregates(mi->sta);
+-	if (i < IEEE80211_TX_RATE_TABLE_SIZE)
+-		rates->rate[i].idx = -1;
 +		/* Fill up remaining, keep one entry for max_probe_rate */
 +		for (; i < (max_rates - 1); i++)
 +			minstrel_ht_set_rate(mp, mi, rates, i, mi->max_tp_rate[i]);
-+
+ 
+-	mi->sta->deflink.agg.max_rc_amsdu_len = minstrel_ht_get_max_amsdu_len(mi);
+-	ieee80211_sta_recalc_aggregates(mi->sta);
 +		if (i < max_rates)
 +			minstrel_ht_set_rate(mp, mi, rates, i++, mi->max_prob_rate);
 +
 +		if (i < IEEE80211_TX_RATE_TABLE_SIZE)
 +			rates->rate[i].idx = -1;
-+	}
 +
-+	/* Whole ratetbl copied before so we do not need to read values again */
-+	if (!manual_rc)
++		/* Read power from ratetbl because we did not memcpy the whole ratetbl. */
 +		for (i = 0; i < max_rates; i++)
-+			rates->rate[i].txpower_idx = manual_tpc
-+					? mi->ratetbl->rate[i].txpower_idx
-+					: -1;
++			rates->rate[i].txpower_idx = manual_tpc ? mi->ratetbl->rate[i].txpower_idx
++								: -1;
++	}
 +
 +	if (update_stats) {
 +		mi->sta->deflink.agg.max_rc_amsdu_len =
@@ -329,7 +326,7 @@
  	rate_control_set_rates(mp->hw, mi->sta, rates);
  }
  
-@@ -1546,7 +1591,7 @@ minstrel_ht_get_sample_rate(struct minst
+@@ -1546,7 +1589,7 @@ minstrel_ht_get_sample_rate(struct minst
  {
  	u8 seq;
  
@@ -338,7 +335,7 @@
  		seq = mi->sample_seq;
  		mi->sample_seq = (seq + 1) % ARRAY_SIZE(minstrel_sample_seq);
  		seq = minstrel_sample_seq[seq];
-@@ -1567,6 +1612,8 @@ minstrel_ht_get_rate(void *priv, struct
+@@ -1567,6 +1610,8 @@ minstrel_ht_get_rate(void *priv, struct
  	struct minstrel_ht_sta *mi = priv_sta;
  	struct minstrel_priv *mp = priv;
  	u16 sample_idx;
@@ -347,7 +344,7 @@
  	s16 sample_txpower = -1;
  
  	info->flags |= mi->tx_flags;
-@@ -1574,6 +1621,8 @@ minstrel_ht_get_rate(void *priv, struct
+@@ -1574,6 +1619,8 @@ minstrel_ht_get_rate(void *priv, struct
  #ifdef CPTCFG_MAC80211_DEBUGFS
  	if (mp->fixed_rate_idx != -1)
  		return;
@@ -356,7 +353,7 @@
  #endif
  
  	/* Don't use EAPOL frames for sampling on non-mrr hw */
-@@ -1581,14 +1630,34 @@ minstrel_ht_get_rate(void *priv, struct
+@@ -1581,14 +1628,34 @@ minstrel_ht_get_rate(void *priv, struct
  	    (info->control.flags & IEEE80211_TX_CTRL_PORT_CTRL_PROTO))
  		return;
  
@@ -392,7 +389,7 @@
  	sample_group = &minstrel_mcs_groups[MI_RATE_GROUP(sample_idx)];
  	sample_idx = MI_RATE_IDX(sample_idx);
  
-@@ -1597,7 +1666,7 @@ minstrel_ht_get_rate(void *priv, struct
+@@ -1597,7 +1664,7 @@ minstrel_ht_get_rate(void *priv, struct
  		return;
  
  	info->flags |= IEEE80211_TX_CTL_RATE_CTRL_PROBE;
@@ -401,7 +398,7 @@
  
  	if (sample_group == &minstrel_mcs_groups[MINSTREL_CCK_GROUP]) {
  		int idx = sample_idx % ARRAY_SIZE(mp->cck_rates);
-@@ -1687,7 +1756,7 @@ minstrel_ht_update_caps(void *priv, stru
+@@ -1687,7 +1754,7 @@ minstrel_ht_update_caps(void *priv, stru
  	else
  		use_vht = 0;
  
@@ -410,7 +407,7 @@
  
  	mi->sta = sta;
  	mi->band = sband->band;
-@@ -1795,7 +1864,11 @@ minstrel_ht_update_caps(void *priv, stru
+@@ -1795,7 +1862,11 @@ minstrel_ht_update_caps(void *priv, stru
  
  	/* create an initial rate table with the lowest supported rates */
  	minstrel_ht_update_stats(mp, mi);
@@ -423,7 +420,7 @@
  }
  
  static void
-@@ -1831,12 +1904,27 @@ minstrel_ht_alloc_sta(void *priv, struct
+@@ -1831,12 +1902,30 @@ minstrel_ht_alloc_sta(void *priv, struct
  			max_rates = sband->n_bitrates;
  	}
  
@@ -437,6 +434,9 @@
 +
 +	INIT_LIST_HEAD(&mi->list);
 +	mi->ratetbl = kzalloc(sizeof(*mi->ratetbl), gfp);
++	for (i = 0; i < ARRAY_SIZE(mi->ratetbl->rate); i++)
++		mi->ratetbl->rate[i].txpower_idx = -1;
++
 +	mi->user_sample_rate = -1;
 +	mi->user_sample_count = 0;
 +	mi->user_sample_txpower = -1;
@@ -452,7 +452,7 @@
  	kfree(priv_sta);
  }
  
-@@ -1926,7 +2014,6 @@ minstrel_ht_alloc(struct ieee80211_hw *h
+@@ -1926,7 +2015,6 @@ minstrel_ht_alloc(struct ieee80211_hw *h
  		mp->max_retry = 7;
  
  	mp->hw = hw;
@@ -460,7 +460,7 @@
  
  	minstrel_ht_init_cck_rates(mp);
  	for (i = 0; i < ARRAY_SIZE(mp->hw->wiphy->bands); i++)
-@@ -1936,6 +2023,7 @@ minstrel_ht_alloc(struct ieee80211_hw *h
+@@ -1936,6 +2024,7 @@ minstrel_ht_alloc(struct ieee80211_hw *h
  }
  
  #ifdef CPTCFG_MAC80211_DEBUGFS
@@ -468,7 +468,7 @@
  static void minstrel_ht_add_debugfs(struct ieee80211_hw *hw, void *priv,
  				    struct dentry *debugfsdir)
  {
-@@ -1944,12 +2032,15 @@ static void minstrel_ht_add_debugfs(stru
+@@ -1944,12 +2033,15 @@ static void minstrel_ht_add_debugfs(stru
  	mp->fixed_rate_idx = (u32) -1;
  	debugfs_create_u32("fixed_rate_idx", S_IRUGO | S_IWUGO, debugfsdir,
  			   &mp->fixed_rate_idx);
@@ -713,7 +713,7 @@
 + */
 +#define ORCA_MAJOR_VERSION 2
 +#define ORCA_MINOR_VERSION 0
-+#define ORCA_PATCH_VERSION 16
++#define ORCA_PATCH_VERSION 17
 +
 +extern u8 sample_table[SAMPLE_COLUMNS][MCS_GROUP_RATES];
 +
