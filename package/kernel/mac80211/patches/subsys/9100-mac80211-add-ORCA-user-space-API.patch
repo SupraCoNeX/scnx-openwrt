@@ -712,8 +712,8 @@
 + * increase patch version for all other small, non-breaking changes
 + */
 +#define ORCA_MAJOR_VERSION 2
-+#define ORCA_MINOR_VERSION 0
-+#define ORCA_PATCH_VERSION 17
++#define ORCA_MINOR_VERSION 1
++#define ORCA_PATCH_VERSION 0
 +
 +extern u8 sample_table[SAMPLE_COLUMNS][MCS_GROUP_RATES];
 +
