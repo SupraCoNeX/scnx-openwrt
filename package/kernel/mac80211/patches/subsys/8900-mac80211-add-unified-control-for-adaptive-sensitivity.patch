@@ -48,7 +48,7 @@
 +ieee80211_feature_ctrl_has(struct ieee80211_hw *hw,
 +			   enum ieee80211_feature_ctrl ftr)
 +{
-+	WARN_ON(ftr == NUM_IEEE80211_FTRCTRL);
++	WARN_ON(ftr >= NUM_IEEE80211_FTRCTRL);
 +	return test_bit(ftr, &hw->feature_ctrl);
 +}
 +
@@ -56,7 +56,7 @@
 +ieee80211_feature_ctrl_set(struct ieee80211_hw *hw,
 +			   enum ieee80211_feature_ctrl ftr)
 +{
-+	WARN_ON(ftr == NUM_IEEE80211_FTRCTRL);
++	WARN_ON(ftr >= NUM_IEEE80211_FTRCTRL);
 +	return __set_bit(ftr, &hw->feature_ctrl);
 +}
 +
@@ -69,7 +69,7 @@
   *	at this point, since the callback can be called during netdev teardown.
 + * @get_feature_state: Get the current state of the specified feature. @state
 + * 	can be any value whose meaning is subject to the specific feature.
-+ * 	However, U32_MAX must not be used because this must be returned in case
++ * 	However, S16_MIN must not be used because this must be returned in case
 + * 	the feature is not supported. A caller should check always check
 + * 	@feature_ctrl in struct ieee80211_hw prior to calling this.
 + * @set_feature_state: Sets the state of the specified feature of the
@@ -77,7 +77,7 @@
 + * 	non-zero value denoting failure. It must return a negative value in
 + * 	case the feature is not supported or cannot be controlled dynamically.
 + * 	@state can be any arbitrary value whose meaning is subject to the
-+ * 	specified feature, however, U32_MAX is forbidden (see @get_feature_state).
++ * 	specified feature, however, S16_MIN is forbidden (see @get_feature_state).
   */
  struct ieee80211_ops {
  	void (*tx)(struct ieee80211_hw *hw,
@@ -85,10 +85,10 @@
  			    struct net_device *dev,
  			    enum tc_setup_type type,
  			    void *type_data);
-+	u32 (*get_feature_state)(struct ieee80211_hw *hw,
++	s16 (*get_feature_state)(struct ieee80211_hw *hw,
 +				 enum ieee80211_feature_ctrl feature);
 +	int (*set_feature_state)(struct ieee80211_hw *hw,
-+				 enum ieee80211_feature_ctrl feature, u32 state);
++				 enum ieee80211_feature_ctrl feature, s16 state);
  };
  
  /**

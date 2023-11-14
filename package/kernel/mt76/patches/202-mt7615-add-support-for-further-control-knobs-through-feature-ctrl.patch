@@ -1,6 +1,6 @@
 --- a/mt7615/init.c
 +++ b/mt7615/init.c
-@@ -417,6 +417,8 @@ mt7615_init_wiphy(struct ieee80211_hw *h
+@@ -414,6 +414,8 @@ mt7615_init_wiphy(struct ieee80211_hw *h
  			IEEE80211_VHT_CAP_MAX_A_MPDU_LENGTH_EXPONENT_MASK;
  
  	ieee80211_feature_ctrl_set(hw, IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY);
@@ -11,18 +11,18 @@
  static void
 --- a/mt7615/main.c
 +++ b/mt7615/main.c
-@@ -1347,6 +1347,10 @@ static u32 mt7615_get_feature_state(stru
+@@ -1347,6 +1347,10 @@ static s16 mt7615_get_feature_state(stru
  	switch (feature) {
  	case IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY:
- 		return (u32)dev->phy.scs_en;
+ 		return (s16)dev->phy.scs_en;
 +	case IEEE80211_FTRCTRL_USER_POWER:
-+		return (hw->conf.power_level > 0) ? hw->conf.power_level : 0;
++		return (s16)hw->conf.power_level;
 +	case IEEE80211_FTRCTRL_FORCE_RATE_RETRY:
-+		return (u32)dev->force_rate_retry_en;
++		return (s16)dev->force_rate_retry_en;
  	default:
- 		return U32_MAX;
+ 		return S16_MIN;
  	}
-@@ -1362,6 +1366,22 @@ static int mt7615_set_feature_state(stru
+@@ -1365,6 +1369,19 @@ static int mt7615_set_feature_state(stru
  	switch (feature) {
  	case IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY:
  		return mt7615_set_scs(dev, enable);
@@ -30,17 +30,14 @@
 +		if (state > 60) /* anything above doesn't really make sense */
 +			return 1;
 +
-+		hw->conf.power_level = state;
-+		if (mt7615_config(hw, IEEE80211_CONF_CHANGE_POWER))
-+			return 1;
-+		else
-+			return 0;
++		hw->conf.power_level = (int)state;
++		return mt7615_config(hw, IEEE80211_CONF_CHANGE_POWER) ? 1 : 0;
 +	case IEEE80211_FTRCTRL_FORCE_RATE_RETRY:
 +		if (!mt7615_wait_for_mcu_init(dev))
 +			return 1;
 +
 +		mt76_rmw_field(dev, MT_AGG_ARCR, MT_AGG_ARCR_INIT_RATE1, enable);
-+		dev->force_rate_retry_en = true;
++		dev->force_rate_retry_en = enable;
 +		return 0;
  	default:
  		return -1;

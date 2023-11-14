@@ -15,19 +15,20 @@
  	case IEEE80211_FTRCTRL_RPT_TPC:
  		return ath9k_get_frame_txpower(sc->sc_ah, feature);
 +	case IEEE80211_FTRCTRL_USER_POWER:
-+		return (hw->conf.power_level >= 0) ? hw->conf.power_level : 0;
++		return (s16)hw->conf.power_level;
  	default:
- 		return U32_MAX;
+ 		return S16_MIN;
  	}
-@@ -2889,6 +2891,15 @@ ath9k_set_feature_state(struct ieee80211
- 	case IEEE80211_FTRCTRL_RPT_TPC:
+@@ -2896,6 +2898,16 @@ ath9k_set_feature_state(struct ieee80211
+ 
  		ath9k_set_frame_txpower(sc->sc_ah, feature, state);
  		break;
 +	case IEEE80211_FTRCTRL_USER_POWER:
 +		if (state > 60) /* anything above doesn't really make sense */
 +			return 1;
 +
-+		hw->conf.power_level = state;
++		hw->conf.power_level = (int)state;
++
 +		mutex_lock(&sc->mutex);
 +		ath9k_set_txpower(sc, NULL);
 +		mutex_unlock(&sc->mutex);

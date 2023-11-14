@@ -11,29 +11,32 @@
  		dev->mphy.leds.cdev.brightness_set = mt7603_led_set_brightness;
 --- a/mt7603/main.c
 +++ b/mt7603/main.c
-@@ -700,6 +700,35 @@ static void mt7603_tx(struct ieee80211_h
+@@ -700,6 +700,38 @@ static void mt7603_tx(struct ieee80211_h
  	mt76_tx(&dev->mphy, control->sta, wcid, skb);
  }
  
-+static u32 mt7603_get_feature_state(struct ieee80211_hw *hw,
++static s16 mt7603_get_feature_state(struct ieee80211_hw *hw,
 +				    enum ieee80211_feature_ctrl feature)
 +{
 +	struct mt7603_dev *dev = hw->priv;
 +
 +	switch (feature) {
 +	case IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY:
-+		return (u32)dev->dynamic_sensitivity;
++		return (s16)dev->dynamic_sensitivity;
 +	default:
-+		return U32_MAX;
++		return S16_MIN;
 +	}
 +}
 +
 +static int mt7603_set_feature_state(struct ieee80211_hw *hw,
 +				    enum ieee80211_feature_ctrl feature,
-+				    u32 state)
++				    s16 state)
 +{
 +	struct mt7603_dev *dev = hw->priv;
 +	bool enable = !!state;
++
++	if (state == S16_MIN)
++		return 1;
 +
 +	switch (feature) {
 +	case IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY:
@@ -47,7 +50,7 @@
  const struct ieee80211_ops mt7603_ops = {
  	.tx = mt7603_tx,
  	.start = mt7603_start,
-@@ -726,6 +755,8 @@ const struct ieee80211_ops mt7603_ops =
+@@ -726,6 +758,8 @@ const struct ieee80211_ops mt7603_ops =
  	.get_survey = mt76_get_survey,
  	.get_antenna = mt76_get_antenna,
  	.set_sar_specs = mt7603_set_sar_specs,
