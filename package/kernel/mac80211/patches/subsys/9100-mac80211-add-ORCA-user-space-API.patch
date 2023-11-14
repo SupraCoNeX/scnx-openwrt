@@ -690,7 +690,7 @@
  #endif
 --- /dev/null
 +++ b/net/mac80211/orca_uapi.c
-@@ -0,0 +1,1255 @@
+@@ -0,0 +1,1298 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * ORCA - Open-Source Resource Control API
@@ -730,6 +730,7 @@
 +	PHY_CMD_STOP,
 +	PHY_CMD_DUMP,
 +	PHY_CMD_SET_FEATURE,
++	PHY_CMD_GET,
 +
 +	/* per-STA commands */
 +	STA_CMD_RC_MODE,
@@ -983,7 +984,7 @@
 +	if (!local->ops->get_feature_state || mp->hw->feature_ctrl == 0)
 +		goto skip_ftrs;
 +
-+	seq_printf(s, "ftrs;%x", hweight_long(mp->hw->feature_ctrl));
++	seq_printf(s, "ftrs;%lx", hweight_long(mp->hw->feature_ctrl));
 +	for (i = 0; i < NUM_IEEE80211_FTRCTRL; i++) {
 +		u32 state;
 +
@@ -1190,6 +1191,42 @@
 +	res = local->ops->set_feature_state(mp->hw, feature, state);
 +	if (res)
 +		return -EIO; /* TODO: more suitable error? */
++
++	return 0;
++}
++
++static int
++orca_phy_get(struct minstrel_priv *mp, const char *args)
++{
++	struct ieee80211_local *local = hw_to_local(mp->hw);
++	char buf[64];
++	unsigned int len, size = 64;
++
++	if (!args)
++		return -EINVAL;
++
++	len = scnprintf(buf, size, "%llx;got;",
++			(unsigned long long)ktime_get_real_fast_ns());
++	if (!strcmp(args, "pwr-limit")) {
++		int txpwr = -1;
++
++		if (!local->ops->get_txpower)
++			return -EOPNOTSUPP;
++
++		local->ops->get_txpower(mp->hw, NULL, &txpwr);
++		txpwr *= 2;
++
++		len += scnprintf(buf + len, size - len, "pwr-limit;%x", txpwr);
++	} else {
++		return -EINVAL;
++	}
++
++	len += scnprintf(buf + len, size - len, "\n");
++
++	spin_lock_bh(&mp->relay_lock);
++	relay_write(mp->relay_ev, buf, len);
++	relay_flush(mp->relay_ev);
++	spin_unlock_bh(&mp->relay_lock);
 +
 +	return 0;
 +}
@@ -1570,6 +1607,9 @@
 +	case PHY_CMD_DUMP:
 +		orca_dump_stations(mp, "dump");
 +		break;
++	case PHY_CMD_GET:
++		err = orca_phy_get(mp, args);
++		break;
 +	case STA_CMD_RC_MODE:
 +	case STA_CMD_TPC_MODE:
 +	case STA_CMD_RESET_STATS:
@@ -1667,6 +1707,9 @@
 +		echo = (mp->monitor & ORCA_ECHO_TPRC);
 +	} else if (!strcmp(cur, "dump")) {
 +		cmd = PHY_CMD_DUMP;
++		echo = false;
++	} else if (!strcmp(cur, "get")) {
++		cmd = PHY_CMD_GET;
 +		echo = false;
 +	} else if (!strcmp(cur, "start")) {
 +		cmd = PHY_CMD_START;
