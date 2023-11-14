@@ -1,6 +1,6 @@
 --- a/mt7615/main.c
 +++ b/mt7615/main.c
-@@ -1325,6 +1325,48 @@ static void mt7615_set_rekey_data(struct
+@@ -1325,6 +1325,51 @@ static void mt7615_set_rekey_data(struct
  }
  #endif /* CONFIG_PM */
  
@@ -18,25 +18,28 @@
 +	return 0;
 +}
 +
-+static u32 mt7615_get_feature_state(struct ieee80211_hw *hw,
++static s16 mt7615_get_feature_state(struct ieee80211_hw *hw,
 +				    enum ieee80211_feature_ctrl feature)
 +{
 +	struct mt7615_dev *dev = mt7615_hw_dev(hw);
 +
 +	switch (feature) {
 +	case IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY:
-+		return (u32)dev->phy.scs_en;
++		return (s16)dev->phy.scs_en;
 +	default:
-+		return U32_MAX;
++		return S16_MIN;
 +	}
 +}
 +
 +static int mt7615_set_feature_state(struct ieee80211_hw *hw,
 +				    enum ieee80211_feature_ctrl feature,
-+				    u32 state)
++				    s16 state)
 +{
 +	struct mt7615_dev *dev = mt7615_hw_dev(hw);
 +	bool enable = !!state;
++
++	if (state == S16_MIN)
++		return 0;
 +
 +	switch (feature) {
 +	case IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY:
@@ -49,7 +52,7 @@
  const struct ieee80211_ops mt7615_ops = {
  	.tx = mt7615_tx,
  	.start = mt7615_start,
-@@ -1372,6 +1414,8 @@ const struct ieee80211_ops mt7615_ops =
+@@ -1372,6 +1417,8 @@ const struct ieee80211_ops mt7615_ops =
  	.set_rekey_data = mt7615_set_rekey_data,
  #endif /* CONFIG_PM */
  	.set_sar_specs = mt7615_set_sar_specs,
@@ -60,7 +63,7 @@
  
 --- a/mt7615/init.c
 +++ b/mt7615/init.c
-@@ -415,6 +415,8 @@ mt7615_init_wiphy(struct ieee80211_hw *h
+@@ -412,6 +412,8 @@ mt7615_init_wiphy(struct ieee80211_hw *h
  	phy->mt76->sband_5g.sband.ht_cap.cap |= IEEE80211_HT_CAP_LDPC_CODING;
  	phy->mt76->sband_5g.sband.vht_cap.cap |=
  			IEEE80211_VHT_CAP_MAX_A_MPDU_LENGTH_EXPONENT_MASK;

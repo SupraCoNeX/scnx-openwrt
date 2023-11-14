@@ -119,7 +119,7 @@
 @@ -2800,6 +2800,47 @@ static void ath9k_set_ani(struct ath_sof
  }
  
- static u32
+ static s16
 +ath9k_get_frame_txpower(struct ath_hw *ah, enum ieee80211_feature_ctrl feature)
 +{
 +	switch (feature) {
@@ -132,13 +132,13 @@
 +	case IEEE80211_FTRCTRL_RPT_TPC:
 +		return REG_READ_FIELD(ah, AR_TPC, AR_TPC_RPT);
 +	default:
-+		return U32_MAX;
++		return INT_MIN;
 +	}
 +}
 +
 +static void
 +ath9k_set_frame_txpower(struct ath_hw *ah, enum ieee80211_feature_ctrl feature,
-+			u32 state)
++			int state)
 +{
 +	struct ath_regulatory *reg = ath9k_hw_regulatory(ah);
 +	u8 val_limit = min_t(u8, state, reg->power_limit);
@@ -160,23 +160,29 @@
 +	}
 +}
 +
-+static u32
++static s16
  ath9k_get_feature_state(struct ieee80211_hw *hw,
  			enum ieee80211_feature_ctrl feature)
  {
-@@ -2810,6 +2851,11 @@ ath9k_get_feature_state(struct ieee80211
- 		return (u32)(!(sc->sc_ah->common.disable_ani));
+@@ -2810,11 +2851,17 @@ ath9k_get_feature_state(struct ieee80211
+ 		return (s16)(!(sc->sc_ah->common.disable_ani));
  	case IEEE80211_FTRCTRL_TPC:
- 		return (u32)sc->sc_ah->tpc_enabled;
+ 		return (s16)sc->sc_ah->tpc_enabled;
 +	case IEEE80211_FTRCTRL_ACK_TPC:
 +	case IEEE80211_FTRCTRL_RTSCTS_TPC:
 +	case IEEE80211_FTRCTRL_CHIRP_TPC:
 +	case IEEE80211_FTRCTRL_RPT_TPC:
 +		return ath9k_get_frame_txpower(sc->sc_ah, feature);
  	default:
- 		return U32_MAX;
+ 		return S16_MIN;
  	}
-@@ -2837,6 +2883,12 @@ ath9k_set_feature_state(struct ieee80211
+ }
+ 
++
+ static int
+ ath9k_set_feature_state(struct ieee80211_hw *hw,
+ 			enum ieee80211_feature_ctrl feature,
+@@ -2840,6 +2887,15 @@ ath9k_set_feature_state(struct ieee80211
  			mutex_unlock(&sc->mutex);
  		}
  		break;
@@ -184,6 +190,9 @@
 +	case IEEE80211_FTRCTRL_RTSCTS_TPC:
 +	case IEEE80211_FTRCTRL_CHIRP_TPC:
 +	case IEEE80211_FTRCTRL_RPT_TPC:
++		if (state < 0)
++			return 1;
++
 +		ath9k_set_frame_txpower(sc->sc_ah, feature, state);
 +		break;
  	default:
