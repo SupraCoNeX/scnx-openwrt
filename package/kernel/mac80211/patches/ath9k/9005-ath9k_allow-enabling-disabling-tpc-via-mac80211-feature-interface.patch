@@ -3,13 +3,13 @@
 @@ -2805,6 +2805,8 @@ ath9k_get_feature_state(struct ieee80211
  	switch (feature) {
  	case IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY:
- 		return (u32)(!(sc->sc_ah->common.disable_ani));
+ 		return (s16)(!(sc->sc_ah->common.disable_ani));
 +	case IEEE80211_FTRCTRL_TPC:
-+		return (u32)sc->sc_ah->tpc_enabled;
++		return (s16)sc->sc_ah->tpc_enabled;
  	default:
- 		return U32_MAX;
+ 		return S16_MIN;
  	}
-@@ -2821,6 +2823,17 @@ ath9k_set_feature_state(struct ieee80211
+@@ -2824,6 +2826,17 @@ ath9k_set_feature_state(struct ieee80211
  	case IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY:
  		ath9k_set_ani(sc, !!state);
  		break;
