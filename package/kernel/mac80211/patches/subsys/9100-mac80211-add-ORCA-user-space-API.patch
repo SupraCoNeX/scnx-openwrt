@@ -690,7 +690,7 @@
  #endif
 --- /dev/null
 +++ b/net/mac80211/orca_uapi.c
-@@ -0,0 +1,1298 @@
+@@ -0,0 +1,1333 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * ORCA - Open-Source Resource Control API
@@ -729,6 +729,7 @@
 +	PHY_CMD_START,
 +	PHY_CMD_STOP,
 +	PHY_CMD_DUMP,
++	PHY_CMD_DUMP_FEATURES,
 +	PHY_CMD_SET_FEATURE,
 +	PHY_CMD_GET,
 +
@@ -913,6 +914,26 @@
 +	return ofs;
 +}
 +
++static unsigned int
++__orca_dump_features(struct minstrel_priv *mp, char *buf, unsigned int buf_size)
++{
++	struct ieee80211_local *local = hw_to_local(mp->hw);
++	unsigned int i, cnt;
++	u32 state;
++
++	cnt = scnprintf(buf, buf_size, "ftrs;%lx", hweight_long(mp->hw->feature_ctrl));
++	for (i = 0; i < NUM_IEEE80211_FTRCTRL; i++) {
++		if (!ieee80211_feature_ctrl_has(mp->hw, i))
++			continue;
++
++		state = local->ops->get_feature_state(mp->hw, i);
++		cnt += scnprintf(buf + cnt, buf_size - cnt, ";%s,%x",
++				 feature_pretty[i], state);
++	}
++
++	cnt += scnprintf(buf + cnt, buf_size - cnt, "\n");
++	return cnt;
++}
 +
 +static int
 +orca_read_phy_info(struct seq_file *s, void *data)
@@ -923,6 +944,7 @@
 +	struct minstrel_priv *mp = local->rate_ctrl->priv;
 +	struct minstrel_ht_sta *mi;
 +	char tmp[64] = {};
++	char *buf_ref;
 +	int i, power_limit, len, ofs = 0;
 +
 +	seq_printf(s, "drv;%s\n", wiphy_dev(wiphy)->driver->name);
@@ -984,28 +1006,17 @@
 +	if (!local->ops->get_feature_state || mp->hw->feature_ctrl == 0)
 +		goto skip_ftrs;
 +
-+	seq_printf(s, "ftrs;%lx", hweight_long(mp->hw->feature_ctrl));
-+	for (i = 0; i < NUM_IEEE80211_FTRCTRL; i++) {
-+		u32 state;
-+
-+		if (!ieee80211_feature_ctrl_has(mp->hw, i))
-+			continue;
-+
-+		state = local->ops->get_feature_state(mp->hw, i);
-+		seq_printf(s, ";%s,%x", feature_pretty[i], state);
-+	}
-+	seq_printf(s, "\n");
++	len = seq_get_buf(s, &buf_ref);
++	len = __orca_dump_features(mp, buf_ref, len);
++	seq_commit(s, len);
 +
 +skip_ftrs:
 +	/* keep this block last! */
 +	rcu_read_lock();
 +	list_for_each_entry_rcu(mi, &mp->stations, list) {
-+		char *buf;
-+		int count, size;
-+
-+		size = seq_get_buf(s, &buf);
-+		count = __orca_dump_sta(mp, mi, buf, size, NULL);
-+		seq_commit(s, count);
++		len = seq_get_buf(s, &buf_ref);
++		len = __orca_dump_sta(mp, mi, buf_ref, len, NULL);
++		seq_commit(s, len);
 +	}
 +	rcu_read_unlock();
 +
@@ -1039,6 +1050,24 @@
 +
 +	spin_unlock_bh(&mp->relay_lock);
 +	rcu_read_unlock();
++}
++
++static void
++orca_dump_features(struct minstrel_priv *mp)
++{
++	char buf[256];
++	unsigned int cnt, size = 256;
++
++	cnt = scnprintf(buf, size, "%llx;",
++			(unsigned long long)ktime_get_real_fast_ns());
++	cnt += __orca_dump_features(mp, buf + cnt, size - cnt);
++
++	spin_lock_bh(&mp->relay_lock);
++
++	relay_write(mp->relay_ev, buf, cnt);
++	relay_flush(mp->relay_ev);
++
++	spin_unlock_bh(&mp->relay_lock);
 +}
 +
 +static int
@@ -1607,6 +1636,9 @@
 +	case PHY_CMD_DUMP:
 +		orca_dump_stations(mp, "dump");
 +		break;
++	case PHY_CMD_DUMP_FEATURES:
++		orca_dump_features(mp);
++		break;
 +	case PHY_CMD_GET:
 +		err = orca_phy_get(mp, args);
 +		break;
@@ -1705,6 +1737,9 @@
 +	} else if (!strcmp(cur, "set_probe")) {
 +		cmd = STA_CMD_PROBE;
 +		echo = (mp->monitor & ORCA_ECHO_TPRC);
++	} else if (!strcmp(cur, "dump_features")) {
++		cmd = PHY_CMD_DUMP_FEATURES;
++		echo = false;
 +	} else if (!strcmp(cur, "dump")) {
 +		cmd = PHY_CMD_DUMP;
 +		echo = false;
