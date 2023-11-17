@@ -50,19 +50,8 @@
  	}
  
  	rd->val[0] = mt7615_mac_tx_rate_val(dev, mphy, &rates[0], stbc, &bw);
-@@ -1327,8 +1347,8 @@ int mt7615_mac_wtbl_set_key(struct mt761
+@@ -1327,10 +1347,54 @@ int mt7615_mac_wtbl_set_key(struct mt761
  	return err;
- }
- 
--static bool mt7615_fill_txs(struct mt7615_dev *dev, struct mt7615_sta *sta,
--			    struct ieee80211_tx_info *info, __le32 *txs_data)
-+static bool mt7615_fill_txinfo(struct mt7615_dev *dev, struct mt7615_sta *sta,
-+			       struct ieee80211_tx_info *info, __le32 *txs_data)
- {
- 	struct ieee80211_supported_band *sband;
- 	struct mt7615_rate_set *rs;
-@@ -1473,6 +1493,239 @@ out:
- 	return true;
  }
  
 +static inline bool mt7615_is_rate_cck(u16 bitrate)
@@ -108,30 +97,40 @@
 +	return max_t(u8, 0, power_idx);
 +}
 +
-+static bool mt7615_fill_txs(struct mt7615_dev *dev, struct mt7615_sta *sta,
+ static bool mt7615_fill_txs(struct mt7615_dev *dev, struct mt7615_sta *sta,
+-			    struct ieee80211_tx_info *info, __le32 *txs_data)
 +			    struct ieee80211_tx_status *txs, __le32 *txs_data)
-+{
-+	struct ieee80211_supported_band *sband;
+ {
+ 	struct ieee80211_supported_band *sband;
 +	struct ieee80211_tx_info *info = txs->info;
-+	struct mt7615_rate_set *rs;
-+	struct mt76_phy *mphy;
-+	int first_idx = 0, last_idx;
-+	int i, idx, count;
-+	bool fixed_rate, ack_timeout;
-+	bool ampdu, cck = false;
-+	bool rs_idx;
-+	u32 rate_set_tsf;
+ 	struct mt7615_rate_set *rs;
+ 	struct mt76_phy *mphy;
+ 	int first_idx = 0, last_idx;
+@@ -1339,28 +1403,41 @@ static bool mt7615_fill_txs(struct mt761
+ 	bool ampdu, cck = false;
+ 	bool rs_idx;
+ 	u32 rate_set_tsf;
+-	u32 final_rate, final_rate_flags, final_nss, txs;
 +	u32 final_rate, final_rate_flags, final_nss, txsf;
 +	s8 final_txpwr;
 +	s16 txpwr_cb;
-+
+ 
+-	txs = le32_to_cpu(txs_data[1]);
+-	ampdu = txs & MT_TXS1_AMPDU;
 +	mphy = &dev->mphy;
 +	if (sta->wcid.phy_idx && dev->mt76.phys[MT_BAND1])
 +		mphy = dev->mt76.phys[MT_BAND1];
-+
+ 
+-	txs = le32_to_cpu(txs_data[3]);
+-	count = FIELD_GET(MT_TXS3_TX_COUNT, txs);
+-	last_idx = FIELD_GET(MT_TXS3_LAST_TX_RATE, txs);
 +	txsf = le32_to_cpu(txs_data[1]);
 +	ampdu = txsf & MT_TXS1_AMPDU;
-+
+ 
+-	txs = le32_to_cpu(txs_data[0]);
+-	fixed_rate = txs & MT_TXS0_FIXED_RATE;
+-	final_rate = FIELD_GET(MT_TXS0_TX_RATE, txs);
+-	ack_timeout = txs & MT_TXS0_ACK_TIMEOUT;
 +	/* 7-bit signed int */
 +	final_txpwr = FIELD_GET(MT_TXS1_TX_POWER_DBM, txsf);
 +	if (final_txpwr & 0x40)
@@ -147,188 +146,200 @@
 +	fixed_rate = txsf & MT_TXS0_FIXED_RATE;
 +	final_rate = FIELD_GET(MT_TXS0_TX_RATE, txsf);
 +	ack_timeout = txsf & MT_TXS0_ACK_TIMEOUT;
-+
+ 
+-	if (!ampdu && (txs & MT_TXS0_RTS_TIMEOUT))
+-		return false;
 +	if (!ampdu && (txsf & MT_TXS0_RTS_TIMEOUT))
 +        	return false;
-+
+ 
+-	if (txs & MT_TXS0_QUEUE_TIMEOUT)
+-		return false;
 +	if (txsf & MT_TXS0_QUEUE_TIMEOUT)
 +        	return false;
-+
-+	if (!ack_timeout)
-+        	info->flags |= IEEE80211_TX_STAT_ACK;
-+
-+	info->status.ampdu_len = 1;
-+	info->status.ampdu_ack_len = !!(info->flags &
-+					IEEE80211_TX_STAT_ACK);
-+
-+	if (ampdu || (info->flags & IEEE80211_TX_CTL_AMPDU))
-+		info->flags |= IEEE80211_TX_STAT_AMPDU | IEEE80211_TX_CTL_AMPDU;
-+
-+	first_idx = max_t(int, 0, last_idx - (count - 1) / MT7615_RATE_RETRY);
-+
-+	if (fixed_rate) {
-+		info->status.rates[0].count = count;
-+		txs->rates[0].try_count = count;
-+        	i = 0;
-+        	goto out;
-+	}
-+
-+	rate_set_tsf = READ_ONCE(sta->rate_set_tsf);
-+	rs_idx = !((u32)(le32_get_bits(txs_data[4], MT_TXS4_F0_TIMESTAMP) -
-+		   rate_set_tsf) < 1000000);
-+	rs_idx ^= rate_set_tsf & BIT(0);
-+	rs = &sta->rateset[rs_idx];
-+
-+	if (!first_idx && rs->probe_rate.idx >= 0) {
-+		info->status.rates[0] = rs->probe_rate;
-+		info->flags |= IEEE80211_TX_CTL_RATE_CTRL_PROBE;
-+
-+		txs->rates[0].rate_idx = rs->tx_probe_rate;
-+		txs->rates[0].txpower_idx = txpwr_cb;
-+
-+		spin_lock_bh(&dev->mt76.lock);
-+		if (sta->rate_probe) {
-+			struct mt7615_phy *phy = &dev->phy;
-+
-+			if (sta->wcid.phy_idx && dev->mt76.phys[MT_BAND1])
-+				phy = dev->mt76.phys[MT_BAND1]->priv;
-+
-+			mt7615_mac_set_rates(phy, sta, NULL, sta->rates);
-+		}
-+		spin_unlock_bh(&dev->mt76.lock);
-+	} else {
-+		info->status.rates[0] = rs->rates[first_idx / 2];
-+		info->flags &= ~IEEE80211_TX_CTL_RATE_CTRL_PROBE;
-+
-+		txs->rates[0].rate_idx = rs->tx_rates[first_idx / 2];
-+		txs->rates[0].txpower_idx = -1;
-+	}
-+	info->status.rates[0].count = 0;
-+	txs->rates[0].try_count = 0;
-+
-+	for (i = 0, idx = first_idx; count && idx <= last_idx; idx++) {
-+		struct ieee80211_tx_rate *cur_rate;
-+		int cur_count;
-+
-+		cur_rate = &rs->rates[idx / 2];
-+		cur_count = min_t(int, MT7615_RATE_RETRY, count);
-+		count -= cur_count;
-+
-+		if (idx && (cur_rate->idx != info->status.rates[i].idx ||
-+			    cur_rate->flags != info->status.rates[i].flags)) {
-+
-+			i++;
-+			if (i == ARRAY_SIZE(info->status.rates)) {
-+				i--;
-+				break;
-+			}
-+
-+			info->status.rates[i] = *cur_rate;
-+			info->status.rates[i].count = 0;
-+
-+			txs->rates[i].rate_idx = rs->tx_rates[idx / 2];
-+			txs->rates[i].try_count = 0;
-+		}
-+		info->status.rates[i].count += cur_count;
-+		txs->rates[i].try_count += cur_count;
-+	}
-+
-+out:
-+	final_rate_flags = info->status.rates[i].flags;
-+
-+	switch (FIELD_GET(MT_TX_RATE_MODE, final_rate)) {
-+	case MT_PHY_TYPE_CCK:
-+		cck = true;
-+		fallthrough;
-+	case MT_PHY_TYPE_OFDM:
-+		if (mphy->chandef.chan->band == NL80211_BAND_5GHZ)
-+			sband = &mphy->sband_5g.sband;
-+		else
-+			sband = &mphy->sband_2g.sband;
-+		final_rate &= MT_TX_RATE_IDX;
-+		final_rate = mt76_get_rate(&dev->mt76, sband, final_rate,
-+					   cck);
-+		final_rate_flags = 0;
-+
-+		txs->rates[i].rate_idx.legacy = sband->bitrates[final_rate].bitrate;
-+		txs->rates[i].rate_idx.flags = 0;
-+
-+		break;
-+	case MT_PHY_TYPE_HT_GF:
-+	case MT_PHY_TYPE_HT:
-+		final_rate_flags |= IEEE80211_TX_RC_MCS;
-+		final_rate &= MT_TX_RATE_IDX;
-+		if (final_rate > 31)
-+			return false;
-+
-+		txs->rates[i].rate_idx.flags |= RATE_INFO_FLAGS_MCS;
-+		txs->rates[i].rate_idx.mcs = final_rate;
-+		break;
-+	case MT_PHY_TYPE_VHT:
-+		final_nss = FIELD_GET(MT_TX_RATE_NSS, final_rate);
-+
-+		if ((final_rate & MT_TX_RATE_STBC) && final_nss)
-+			final_nss--;
-+
-+		txs->rates[i].rate_idx.flags |= RATE_INFO_FLAGS_VHT_MCS;
-+		txs->rates[i].rate_idx.mcs = (final_rate & MT_TX_RATE_IDX);
-+		txs->rates[i].rate_idx.nss = final_nss + 1;
-+
-+		final_rate_flags |= IEEE80211_TX_RC_VHT_MCS;
-+		final_rate = (final_rate & MT_TX_RATE_IDX) | (final_nss << 4);
-+		break;
-+	default:
-+		return false;
-+	}
-+
-+	info->status.rates[i].idx = final_rate;
-+	info->status.rates[i].flags = final_rate_flags;
-+
-+	if (dev->phy.tpc_txs_raw)
-+		/* as it's only 7 bits originally, it is between 128 and 255
-+		 * while the indices will always be between 0 and 127 */
-+		txs->rates[i].txpower_idx = (u8)final_txpwr;
-+	else
-+		txs->rates[i].txpower_idx =
-+			mt7615_abs_power_to_index(mphy,
-+						  &txs->rates[i].rate_idx,
-+						  final_txpwr);
-+
-+	txs->n_rates = i + 1;
-+	return true;
-+}
-+
- static bool mt7615_mac_add_txs_skb(struct mt7615_dev *dev,
- 				   struct mt7615_sta *sta, int pid,
- 				   __le32 *txs_data)
-@@ -1491,7 +1744,7 @@ static bool mt7615_mac_add_txs_skb(struc
- 	if (skb) {
- 		struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
  
+ 	if (!ack_timeout)
+-		info->flags |= IEEE80211_TX_STAT_ACK;
++        	info->flags |= IEEE80211_TX_STAT_ACK;
+ 
+ 	info->status.ampdu_len = 1;
+ 	info->status.ampdu_ack_len = !!(info->flags &
+@@ -1373,13 +1450,16 @@ static bool mt7615_fill_txs(struct mt761
+ 
+ 	if (fixed_rate) {
+ 		info->status.rates[0].count = count;
++		if (txs->rates)
++			txs->rates[0].try_count = count;
++
+ 		i = 0;
+-		goto out;
++        	goto out;
+ 	}
+ 
+ 	rate_set_tsf = READ_ONCE(sta->rate_set_tsf);
+ 	rs_idx = !((u32)(le32_get_bits(txs_data[4], MT_TXS4_F0_TIMESTAMP) -
+-			 rate_set_tsf) < 1000000);
++		   rate_set_tsf) < 1000000);
+ 	rs_idx ^= rate_set_tsf & BIT(0);
+ 	rs = &sta->rateset[rs_idx];
+ 
+@@ -1387,6 +1467,11 @@ static bool mt7615_fill_txs(struct mt761
+ 		info->status.rates[0] = rs->probe_rate;
+ 		info->flags |= IEEE80211_TX_CTL_RATE_CTRL_PROBE;
+ 
++		if (txs->rates) {
++			txs->rates[0].rate_idx = rs->tx_probe_rate;
++			txs->rates[0].txpower_idx = txpwr_cb;
++		}
++
+ 		spin_lock_bh(&dev->mt76.lock);
+ 		if (sta->rate_probe) {
+ 			struct mt7615_phy *phy = &dev->phy;
+@@ -1400,8 +1485,15 @@ static bool mt7615_fill_txs(struct mt761
+ 	} else {
+ 		info->status.rates[0] = rs->rates[first_idx / 2];
+ 		info->flags &= ~IEEE80211_TX_CTL_RATE_CTRL_PROBE;
++
++		if (txs->rates) {
++			txs->rates[0].rate_idx = rs->tx_rates[first_idx / 2];
++			txs->rates[0].txpower_idx = -1;
++		}
+ 	}
+ 	info->status.rates[0].count = 0;
++	if (txs->rates)
++		txs->rates[0].try_count = 0;
+ 
+ 	for (i = 0, idx = first_idx; count && idx <= last_idx; idx++) {
+ 		struct ieee80211_tx_rate *cur_rate;
+@@ -1413,6 +1505,7 @@ static bool mt7615_fill_txs(struct mt761
+ 
+ 		if (idx && (cur_rate->idx != info->status.rates[i].idx ||
+ 			    cur_rate->flags != info->status.rates[i].flags)) {
++
+ 			i++;
+ 			if (i == ARRAY_SIZE(info->status.rates)) {
+ 				i--;
+@@ -1421,9 +1514,15 @@ static bool mt7615_fill_txs(struct mt761
+ 
+ 			info->status.rates[i] = *cur_rate;
+ 			info->status.rates[i].count = 0;
+-		}
+ 
++			if (txs->rates) {
++				txs->rates[i].rate_idx = rs->tx_rates[idx / 2];
++				txs->rates[i].try_count = 0;
++			}
++		}
+ 		info->status.rates[i].count += cur_count;
++		if (txs->rates)
++			txs->rates[i].try_count += cur_count;
+ 	}
+ 
+ out:
+@@ -1434,10 +1533,6 @@ out:
+ 		cck = true;
+ 		fallthrough;
+ 	case MT_PHY_TYPE_OFDM:
+-		mphy = &dev->mphy;
+-		if (sta->wcid.phy_idx && dev->mt76.phys[MT_BAND1])
+-			mphy = dev->mt76.phys[MT_BAND1];
+-
+ 		if (mphy->chandef.chan->band == NL80211_BAND_5GHZ)
+ 			sband = &mphy->sband_5g.sband;
+ 		else
+@@ -1446,6 +1541,12 @@ out:
+ 		final_rate = mt76_get_rate(&dev->mt76, sband, final_rate,
+ 					   cck);
+ 		final_rate_flags = 0;
++
++		if (txs->rates) {
++			txs->rates[i].rate_idx.legacy = sband->bitrates[final_rate]
++							       .bitrate;
++			txs->rates[i].rate_idx.flags = 0;
++		}
+ 		break;
+ 	case MT_PHY_TYPE_HT_GF:
+ 	case MT_PHY_TYPE_HT:
+@@ -1453,6 +1554,11 @@ out:
+ 		final_rate &= MT_TX_RATE_IDX;
+ 		if (final_rate > 31)
+ 			return false;
++
++		if (txs->rates) {
++			txs->rates[i].rate_idx.flags |= RATE_INFO_FLAGS_MCS;
++			txs->rates[i].rate_idx.mcs = final_rate;
++		}
+ 		break;
+ 	case MT_PHY_TYPE_VHT:
+ 		final_nss = FIELD_GET(MT_TX_RATE_NSS, final_rate);
+@@ -1460,6 +1566,12 @@ out:
+ 		if ((final_rate & MT_TX_RATE_STBC) && final_nss)
+ 			final_nss--;
+ 
++		if (txs->rates) {
++			txs->rates[i].rate_idx.flags |= RATE_INFO_FLAGS_VHT_MCS;
++			txs->rates[i].rate_idx.mcs = (final_rate & MT_TX_RATE_IDX);
++			txs->rates[i].rate_idx.nss = final_nss + 1;
++		}
++
+ 		final_rate_flags |= IEEE80211_TX_RC_VHT_MCS;
+ 		final_rate = (final_rate & MT_TX_RATE_IDX) | (final_nss << 4);
+ 		break;
+@@ -1470,6 +1582,20 @@ out:
+ 	info->status.rates[i].idx = final_rate;
+ 	info->status.rates[i].flags = final_rate_flags;
+ 
++	if (txs->rates) {
++		if (dev->phy.tpc_txs_raw)
++			/* as it's only 7 bits originally, it is between 128 and 255
++			 * while the indices will always be between 0 and 127 */
++			txs->rates[i].txpower_idx = (u8)final_txpwr;
++		else
++			txs->rates[i].txpower_idx =
++				mt7615_abs_power_to_index(mphy,
++							  &txs->rates[i].rate_idx,
++							  final_txpwr);
++
++		txs->n_rates = i + 1;
++	}
++
+ 	return true;
+ }
+ 
+@@ -1489,11 +1615,13 @@ static bool mt7615_mac_add_txs_skb(struc
+ 	mt76_tx_status_lock(mdev, &list);
+ 	skb = mt76_tx_status_skb_get(mdev, &sta->wcid, pid, &list);
+ 	if (skb) {
+-		struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
+-
 -		if (!mt7615_fill_txs(dev, sta, info, txs_data)) {
-+		if (!mt7615_fill_txinfo(dev, sta, info, txs_data)) {
- 			info->status.rates[0].count = 0;
- 			info->status.rates[0].idx = -1;
+-			info->status.rates[0].count = 0;
+-			info->status.rates[0].idx = -1;
++		struct ieee80211_tx_status txs = {
++			.info = IEEE80211_SKB_CB(skb)
++		};
++
++		if (!mt7615_fill_txs(dev, sta, &txs, txs_data)) {
++			txs.info->status.rates[0].count = 0;
++			txs.info->status.rates[0].idx = -1;
  		}
-@@ -1507,6 +1760,12 @@ static void mt7615_mac_add_txs(struct mt
+ 
+ 		mt76_tx_status_skb_done(mdev, skb, &list);
+@@ -1506,6 +1634,8 @@ static bool mt7615_mac_add_txs_skb(struc
+ static void mt7615_mac_add_txs(struct mt7615_dev *dev, void *data)
  {
  	struct ieee80211_tx_info info = {};
- 	struct ieee80211_sta *sta = NULL;
++	struct ieee80211_tx_status txs = { .info = &info };
 +	struct ieee80211_rate_status rates[IEEE80211_TX_MAX_RATES];
-+	struct ieee80211_tx_status txs = {
-+		.rates = &rates[0],
-+		.n_rates = 0,
-+		.info = &info
-+	};
+ 	struct ieee80211_sta *sta = NULL;
  	struct mt7615_sta *msta = NULL;
  	struct mt76_wcid *wcid;
- 	struct mt76_phy *mphy = &dev->mt76.phy;
-@@ -1549,9 +1808,11 @@ static void mt7615_mac_add_txs(struct mt
+@@ -1549,9 +1679,12 @@ static void mt7615_mac_add_txs(struct mt
  	if (wcid->phy_idx && dev->mt76.phys[MT_BAND1])
  		mphy = dev->mt76.phys[MT_BAND1];
  
 -	if (mt7615_fill_txs(dev, msta, &info, txs_data)) {
 +	txs.sta = sta;
++	txs.rates = &rates[0];
 +
 +	if (mt7615_fill_txs(dev, msta, &txs, txs_data)) {
  		spin_lock_bh(&dev->mt76.rx_lock);
