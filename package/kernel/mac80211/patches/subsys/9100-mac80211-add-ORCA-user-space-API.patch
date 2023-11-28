@@ -690,7 +690,7 @@
  #endif
 --- /dev/null
 +++ b/net/mac80211/orca_uapi.c
-@@ -0,0 +1,1335 @@
+@@ -0,0 +1,1337 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * ORCA - Open-Source Resource Control API
@@ -713,7 +713,7 @@
 + */
 +#define ORCA_MAJOR_VERSION 2
 +#define ORCA_MINOR_VERSION 1
-+#define ORCA_PATCH_VERSION 0
++#define ORCA_PATCH_VERSION 1
 +
 +extern u8 sample_table[SAMPLE_COLUMNS][MCS_GROUP_RATES];
 +
@@ -785,9 +785,9 @@
 +		seq_printf(s, ";rate%d,count%d,txpwr%d", i, i, i);
 +	seq_printf(s, "\n");
 +
-+	seq_printf(s, "#rxs;macaddr;last_signal");
++	seq_printf(s, "#rxs;macaddr;overall_signal");
 +	for (i = 0; i < IEEE80211_MAX_CHAINS; i++)
-+		seq_printf(s, ";signal%d", i);
++		seq_printf(s, ";signal_chain%d", i);
 +	seq_printf(s, "\n");
 +
 +	seq_printf(s, "#stats;macaddr;rate;avg_prob;avg_tp;cur_success;"
@@ -845,7 +845,9 @@
 +	seq_printf(s, "#reset_stats;macaddr\n");
 +	seq_printf(s, "#reset_stats;all\n");
 +
++	seq_printf(s, "#dump_features\n");
 +	seq_printf(s, "#set_feature;feature;state\n");
++	seq_printf(s, "#get;property\n");
 +
 +	for (i = 0; i < MINSTREL_GROUPS_NB; i++) {
 +		const struct mcs_group *g = &minstrel_mcs_groups[i];
