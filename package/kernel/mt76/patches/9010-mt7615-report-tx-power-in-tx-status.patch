@@ -106,7 +106,7 @@
  	struct mt7615_rate_set *rs;
  	struct mt76_phy *mphy;
  	int first_idx = 0, last_idx;
-@@ -1339,28 +1403,41 @@ static bool mt7615_fill_txs(struct mt761
+@@ -1339,24 +1403,37 @@ static bool mt7615_fill_txs(struct mt761
  	bool ampdu, cck = false;
  	bool rs_idx;
  	u32 rate_set_tsf;
@@ -148,22 +148,15 @@
 +	ack_timeout = txsf & MT_TXS0_ACK_TIMEOUT;
  
 -	if (!ampdu && (txs & MT_TXS0_RTS_TIMEOUT))
--		return false;
 +	if (!ampdu && (txsf & MT_TXS0_RTS_TIMEOUT))
-+        	return false;
+ 		return false;
  
 -	if (txs & MT_TXS0_QUEUE_TIMEOUT)
--		return false;
 +	if (txsf & MT_TXS0_QUEUE_TIMEOUT)
-+        	return false;
+ 		return false;
  
  	if (!ack_timeout)
--		info->flags |= IEEE80211_TX_STAT_ACK;
-+        	info->flags |= IEEE80211_TX_STAT_ACK;
- 
- 	info->status.ampdu_len = 1;
- 	info->status.ampdu_ack_len = !!(info->flags &
-@@ -1373,13 +1450,16 @@ static bool mt7615_fill_txs(struct mt761
+@@ -1373,6 +1450,9 @@ static bool mt7615_fill_txs(struct mt761
  
  	if (fixed_rate) {
  		info->status.rates[0].count = count;
@@ -171,17 +164,8 @@
 +			txs->rates[0].try_count = count;
 +
  		i = 0;
--		goto out;
-+        	goto out;
+ 		goto out;
  	}
- 
- 	rate_set_tsf = READ_ONCE(sta->rate_set_tsf);
- 	rs_idx = !((u32)(le32_get_bits(txs_data[4], MT_TXS4_F0_TIMESTAMP) -
--			 rate_set_tsf) < 1000000);
-+		   rate_set_tsf) < 1000000);
- 	rs_idx ^= rate_set_tsf & BIT(0);
- 	rs = &sta->rateset[rs_idx];
- 
 @@ -1387,6 +1467,11 @@ static bool mt7615_fill_txs(struct mt761
  		info->status.rates[0] = rs->probe_rate;
  		info->flags |= IEEE80211_TX_CTL_RATE_CTRL_PROBE;
