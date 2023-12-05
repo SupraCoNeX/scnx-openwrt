@@ -111,7 +111,7 @@
  
 +struct ieee80211_hw_txpower_range mt7615_txpower_range = {
 +	.start_idx = 0,
-+	.start_pwr = -16,
++	.start_pwr = -32,
 +	.n_levels = 32,
 +	.pwr_step = 2,
 +};
