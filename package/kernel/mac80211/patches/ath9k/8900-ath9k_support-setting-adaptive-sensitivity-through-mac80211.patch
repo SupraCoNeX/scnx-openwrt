@@ -1,6 +1,6 @@
 --- a/drivers/net/wireless/ath/ath9k/init.c
 +++ b/drivers/net/wireless/ath/ath9k/init.c
-@@ -1026,6 +1026,8 @@ static void ath9k_set_hw_capab(struct at
+@@ -1027,6 +1027,8 @@ static void ath9k_set_hw_capab(struct at
  	hw->txq_data_size = sizeof(struct ath_atx_tid);
  	hw->extra_tx_headroom = 4;
  
