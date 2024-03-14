@@ -28,9 +28,11 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
  include/net/mac80211.h | 33 +++++++++++++++++++++++++++------
  1 file changed, 27 insertions(+), 6 deletions(-)
 
---- a/include/net/mac80211.h
-+++ b/include/net/mac80211.h
-@@ -1233,14 +1233,14 @@ ieee80211_info_get_tx_time_est(struct ie
+Index: backports-6.9.9/include/net/mac80211.h
+===================================================================
+--- backports-6.9.9.orig/include/net/mac80211.h
++++ backports-6.9.9/include/net/mac80211.h
+@@ -1264,14 +1264,14 @@ ieee80211_info_get_tx_time_est(struct ie
   *
   * @rate_idx The actual used rate.
   * @try_count How often the rate was tried.
@@ -47,7 +49,7 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
  };
  
  /**
-@@ -2740,6 +2740,27 @@ enum ieee80211_hw_flags {
+@@ -2853,6 +2853,27 @@ enum ieee80211_hw_flags {
  };
  
  /**
@@ -75,7 +77,7 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
   * struct ieee80211_hw - hardware information and state
   *
   * This structure contains the configuration and hardware
-@@ -2867,11 +2888,11 @@ enum ieee80211_hw_flags {
+@@ -2978,11 +2999,11 @@ enum ieee80211_hw_flags {
   *
   * @max_mtu: the max mtu could be set.
   *
@@ -91,7 +93,7 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
   */
  struct ieee80211_hw {
  	struct ieee80211_conf conf;
-@@ -2909,8 +2930,8 @@ struct ieee80211_hw {
+@@ -3020,8 +3041,8 @@ struct ieee80211_hw {
  	u8 tx_sk_pacing_shift;
  	u8 weight_multiplier;
  	u32 max_mtu;
@@ -102,7 +104,7 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
  };
  
  static inline bool _ieee80211_hw_check(struct ieee80211_hw *hw,
-@@ -2927,6 +2948,8 @@ static inline void _ieee80211_hw_set(str
+@@ -3038,6 +3059,8 @@ static inline void _ieee80211_hw_set(str
  }
  #define ieee80211_hw_set(hw, flg)	_ieee80211_hw_set(hw, IEEE80211_HW_##flg)
  
@@ -111,11 +113,13 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
  /**
   * struct ieee80211_scan_request - hw scan request
   *
---- a/net/mac80211/util.c
-+++ b/net/mac80211/util.c
-@@ -5146,3 +5146,22 @@ void ieee80211_fragment_element(struct s
- 
- 	*len_pos = elem_len;
+Index: backports-6.9.9/net/mac80211/util.c
+===================================================================
+--- backports-6.9.9.orig/net/mac80211/util.c
++++ backports-6.9.9/net/mac80211/util.c
+@@ -4368,3 +4368,22 @@ ieee80211_min_bw_limit_from_chandef(stru
+ 		return IEEE80211_CONN_BW_LIMIT_20;
+ 	}
  }
 +
 +s16

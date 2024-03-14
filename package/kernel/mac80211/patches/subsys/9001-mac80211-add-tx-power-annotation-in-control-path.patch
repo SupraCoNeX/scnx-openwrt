@@ -18,9 +18,11 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
  include/net/mac80211.h | 13 +++++++++++--
  1 file changed, 11 insertions(+), 2 deletions(-)
 
---- a/include/net/mac80211.h
-+++ b/include/net/mac80211.h
-@@ -1124,6 +1124,10 @@ ieee80211_rate_get_vht_nss(const struct
+Index: backports-6.9.9/include/net/mac80211.h
+===================================================================
+--- backports-6.9.9.orig/include/net/mac80211.h
++++ backports-6.9.9/include/net/mac80211.h
+@@ -1153,6 +1153,10 @@ ieee80211_rate_get_vht_nss(const struct
   * @control.use_cts_prot: use RTS/CTS
   * @control.short_preamble: use short preamble (CCK only)
   * @control.skip_table: skip externally configured rate table
@@ -31,16 +33,17 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
   * @control.jiffies: timestamp for expiry on powersave clients
   * @control.vif: virtual interface (may be NULL)
   * @control.hw_key: key to encrypt with (may be NULL)
-@@ -1172,7 +1176,7 @@ struct ieee80211_tx_info {
- 					u8 use_cts_prot:1;
- 					u8 short_preamble:1;
- 					u8 skip_table:1;
--					/* 2 bytes free */
-+					s16 txpower_idx;
+@@ -1200,8 +1204,7 @@ struct ieee80211_tx_info {
+ 
+ 					/* for injection only (bitmap) */
+ 					u8 antennas:2;
+-
+-					/* 14 bits free */
++					s16 txpower_idx:14;
  				};
  				/* only needed before rate control */
  				unsigned long jiffies;
-@@ -2184,6 +2188,10 @@ enum ieee80211_sta_rx_bandwidth {
+@@ -2284,6 +2287,10 @@ enum ieee80211_sta_rx_bandwidth {
   * @rcu_head: RCU head used for freeing the table on update
   * @rate: transmit rates/flags to be used by default.
   *	Overriding entries per-packet is possible by using cb tx control.
@@ -51,7 +54,7 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
   */
  struct ieee80211_sta_rates {
  	struct rcu_head rcu_head;
-@@ -2193,6 +2201,7 @@ struct ieee80211_sta_rates {
+@@ -2293,6 +2300,7 @@ struct ieee80211_sta_rates {
  		u8 count_cts;
  		u8 count_rts;
  		u16 flags;

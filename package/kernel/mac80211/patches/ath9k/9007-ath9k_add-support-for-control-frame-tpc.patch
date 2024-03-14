@@ -1,6 +1,8 @@
---- a/drivers/net/wireless/ath/ath9k/debug.c
-+++ b/drivers/net/wireless/ath/ath9k/debug.c
-@@ -1378,6 +1378,84 @@ static const struct file_operations fops
+Index: backports-6.9.9/drivers/net/wireless/ath/ath9k/debug.c
+===================================================================
+--- backports-6.9.9.orig/drivers/net/wireless/ath/ath9k/debug.c
++++ backports-6.9.9/drivers/net/wireless/ath/ath9k/debug.c
+@@ -1338,6 +1338,84 @@ static const struct file_operations fops
  	.llseek = default_llseek,
  };
  
@@ -85,7 +87,7 @@
  static ssize_t read_file_nf_override(struct file *file,
  				     char __user *user_buf,
  				     size_t count, loff_t *ppos)
-@@ -1697,8 +1775,10 @@ int ath9k_init_debug(struct ath_hw *ah)
+@@ -1657,8 +1735,10 @@ int ath9k_init_debug(struct ath_hw *ah)
  			    sc, &fops_ackto);
  #endif
  	debugfs_create_file("tpc", 0600, sc->debug.debugfs_phy, sc, &fops_tpc);
@@ -98,8 +100,10 @@
  	debugfs_create_file("nf_override", 0600,
  			    sc->debug.debugfs_phy, sc, &fops_nf_override);
  
---- a/drivers/net/wireless/ath/ath9k/init.c
-+++ b/drivers/net/wireless/ath/ath9k/init.c
+Index: backports-6.9.9/drivers/net/wireless/ath/ath9k/init.c
+===================================================================
+--- backports-6.9.9.orig/drivers/net/wireless/ath/ath9k/init.c
++++ backports-6.9.9/drivers/net/wireless/ath/ath9k/init.c
 @@ -1038,6 +1038,13 @@ static void ath9k_set_hw_capab(struct at
  	ieee80211_feature_ctrl_set(hw, IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY);
  	ieee80211_feature_ctrl_set(hw, IEEE80211_FTRCTRL_TPC);
@@ -114,9 +118,11 @@
  	hw->wiphy->available_antennas_rx = BIT(ah->caps.max_rxchains) - 1;
  	hw->wiphy->available_antennas_tx = BIT(ah->caps.max_txchains) - 1;
  
---- a/drivers/net/wireless/ath/ath9k/main.c
-+++ b/drivers/net/wireless/ath/ath9k/main.c
-@@ -2800,6 +2800,47 @@ static void ath9k_set_ani(struct ath_sof
+Index: backports-6.9.9/drivers/net/wireless/ath/ath9k/main.c
+===================================================================
+--- backports-6.9.9.orig/drivers/net/wireless/ath/ath9k/main.c
++++ backports-6.9.9/drivers/net/wireless/ath/ath9k/main.c
+@@ -2813,6 +2813,47 @@ static void ath9k_set_ani(struct ath_sof
  }
  
  static s16
@@ -164,7 +170,7 @@
  ath9k_get_feature_state(struct ieee80211_hw *hw,
  			enum ieee80211_feature_ctrl feature)
  {
-@@ -2810,11 +2851,17 @@ ath9k_get_feature_state(struct ieee80211
+@@ -2823,11 +2864,17 @@ ath9k_get_feature_state(struct ieee80211
  		return (s16)(!(sc->sc_ah->common.disable_ani));
  	case IEEE80211_FTRCTRL_TPC:
  		return (s16)sc->sc_ah->tpc_enabled;
@@ -182,7 +188,7 @@
  static int
  ath9k_set_feature_state(struct ieee80211_hw *hw,
  			enum ieee80211_feature_ctrl feature,
-@@ -2840,6 +2887,15 @@ ath9k_set_feature_state(struct ieee80211
+@@ -2853,6 +2900,15 @@ ath9k_set_feature_state(struct ieee80211
  			mutex_unlock(&sc->mutex);
  		}
  		break;

@@ -1,5 +1,7 @@
---- a/mt7615/main.c
-+++ b/mt7615/main.c
+Index: mt76-2024.07.13~3b47d9df/mt7615/main.c
+===================================================================
+--- mt76-2024.07.13~3b47d9df.orig/mt7615/main.c
++++ mt76-2024.07.13~3b47d9df/mt7615/main.c
 @@ -1325,6 +1325,51 @@ static void mt7615_set_rekey_data(struct
  }
  #endif /* CONFIG_PM */
@@ -50,9 +52,9 @@
 +}
 +
  const struct ieee80211_ops mt7615_ops = {
- 	.tx = mt7615_tx,
- 	.start = mt7615_start,
-@@ -1372,6 +1417,8 @@ const struct ieee80211_ops mt7615_ops =
+ 	.add_chanctx = ieee80211_emulate_add_chanctx,
+ 	.remove_chanctx = ieee80211_emulate_remove_chanctx,
+@@ -1376,6 +1421,8 @@ const struct ieee80211_ops mt7615_ops =
  	.set_rekey_data = mt7615_set_rekey_data,
  #endif /* CONFIG_PM */
  	.set_sar_specs = mt7615_set_sar_specs,
@@ -61,8 +63,10 @@
  };
  EXPORT_SYMBOL_GPL(mt7615_ops);
  
---- a/mt7615/init.c
-+++ b/mt7615/init.c
+Index: mt76-2024.07.13~3b47d9df/mt7615/init.c
+===================================================================
+--- mt76-2024.07.13~3b47d9df.orig/mt7615/init.c
++++ mt76-2024.07.13~3b47d9df/mt7615/init.c
 @@ -412,6 +412,8 @@ mt7615_init_wiphy(struct ieee80211_hw *h
  	phy->mt76->sband_5g.sband.ht_cap.cap |= IEEE80211_HT_CAP_LDPC_CODING;
  	phy->mt76->sband_5g.sband.vht_cap.cap |=

@@ -1,6 +1,8 @@
---- a/include/net/mac80211.h
-+++ b/include/net/mac80211.h
-@@ -3724,6 +3724,12 @@ struct ieee80211_prep_tx_info {
+Index: backports-6.9.9/include/net/mac80211.h
+===================================================================
+--- backports-6.9.9.orig/include/net/mac80211.h
++++ backports-6.9.9/include/net/mac80211.h
+@@ -3837,6 +3837,12 @@ struct ieee80211_prep_tx_info {
   * @IEEE80211_FTRCTRL_RTSCTS_TPC: Control tx power of RTS/CTS frames.
   * @IEEE80211_FTRCTRL_CHIRP_TPC: Control tx power of CHIRP frames.
   * @IEEE80211_FTRCTRL_RPT_TPC: Control tx power of RPT frames.
@@ -13,7 +15,7 @@
   *
   * @NUM_IEEE80211_FTRCTL: Number of features.
   */
-@@ -3734,6 +3740,8 @@ enum ieee80211_feature_ctrl {
+@@ -3847,6 +3853,8 @@ enum ieee80211_feature_ctrl {
  	IEEE80211_FTRCTRL_RTSCTS_TPC,
  	IEEE80211_FTRCTRL_CHIRP_TPC,
  	IEEE80211_FTRCTRL_RPT_TPC,

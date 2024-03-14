@@ -1,6 +1,8 @@
---- a/include/net/mac80211.h
-+++ b/include/net/mac80211.h
-@@ -3713,18 +3713,27 @@ struct ieee80211_prep_tx_info {
+Index: backports-6.9.9/include/net/mac80211.h
+===================================================================
+--- backports-6.9.9.orig/include/net/mac80211.h
++++ backports-6.9.9/include/net/mac80211.h
+@@ -3826,18 +3826,27 @@ struct ieee80211_prep_tx_info {
   * and the driver ops get_feature_state and set_feature_state to dynamically
   * control the state of a particular feature at runtime.
   *
