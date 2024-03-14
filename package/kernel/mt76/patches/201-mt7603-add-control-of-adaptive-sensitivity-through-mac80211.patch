@@ -1,6 +1,8 @@
---- a/mt7603/init.c
-+++ b/mt7603/init.c
-@@ -539,6 +539,8 @@ int mt7603_register_device(struct mt7603
+Index: mt76-2024.07.13~3b47d9df/mt7603/init.c
+===================================================================
+--- mt76-2024.07.13~3b47d9df.orig/mt7603/init.c
++++ mt76-2024.07.13~3b47d9df/mt7603/init.c
+@@ -541,6 +541,8 @@ int mt7603_register_device(struct mt7603
  	ieee80211_hw_set(hw, HOST_BROADCAST_PS_BUFFERING);
  	ieee80211_hw_set(hw, NEEDS_UNIQUE_STA_ADDR);
  
@@ -9,8 +11,10 @@
  	/* init led callbacks */
  	if (IS_ENABLED(CONFIG_MT76_LEDS)) {
  		dev->mphy.leds.cdev.brightness_set = mt7603_led_set_brightness;
---- a/mt7603/main.c
-+++ b/mt7603/main.c
+Index: mt76-2024.07.13~3b47d9df/mt7603/main.c
+===================================================================
+--- mt76-2024.07.13~3b47d9df.orig/mt7603/main.c
++++ mt76-2024.07.13~3b47d9df/mt7603/main.c
 @@ -700,6 +700,38 @@ static void mt7603_tx(struct ieee80211_h
  	mt76_tx(&dev->mphy, control->sta, wcid, skb);
  }
@@ -48,9 +52,9 @@
 +}
 +
  const struct ieee80211_ops mt7603_ops = {
- 	.tx = mt7603_tx,
- 	.start = mt7603_start,
-@@ -726,6 +758,8 @@ const struct ieee80211_ops mt7603_ops =
+ 	.add_chanctx = ieee80211_emulate_add_chanctx,
+ 	.remove_chanctx = ieee80211_emulate_remove_chanctx,
+@@ -730,6 +762,8 @@ const struct ieee80211_ops mt7603_ops =
  	.get_survey = mt76_get_survey,
  	.get_antenna = mt76_get_antenna,
  	.set_sar_specs = mt7603_set_sar_specs,
@@ -58,4 +62,4 @@
 +	.set_feature_state = mt7603_set_feature_state,
  };
  
- MODULE_LICENSE("Dual BSD/GPL");
+ MODULE_DESCRIPTION("MediaTek MT7603E and MT76x8 wireless driver");

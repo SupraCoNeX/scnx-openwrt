@@ -20,9 +20,11 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
  net/mac80211/util.c    | 33 +++++++++++++++++++++++++++++++++
  2 files changed, 52 insertions(+)
 
---- a/include/net/mac80211.h
-+++ b/include/net/mac80211.h
-@@ -1103,6 +1103,25 @@ ieee80211_rate_get_vht_nss(const struct
+Index: backports-6.9.9/include/net/mac80211.h
+===================================================================
+--- backports-6.9.9.orig/include/net/mac80211.h
++++ backports-6.9.9/include/net/mac80211.h
+@@ -1130,6 +1130,25 @@ ieee80211_rate_get_vht_nss(const struct
  }
  
  /**
@@ -48,9 +50,11 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
   * struct ieee80211_tx_info - skb transmit information
   *
   * This structure is placed in skb->cb for three uses:
---- a/net/mac80211/util.c
-+++ b/net/mac80211/util.c
-@@ -5165,3 +5165,36 @@ ieee80211_hw_get_max_txpower_idx(struct
+Index: backports-6.9.9/net/mac80211/util.c
+===================================================================
+--- backports-6.9.9.orig/net/mac80211/util.c
++++ backports-6.9.9/net/mac80211/util.c
+@@ -4387,3 +4387,36 @@ ieee80211_hw_get_max_txpower_idx(struct
  	return (s16)max_idx;
  }
  EXPORT_SYMBOL(ieee80211_hw_get_max_txpower_idx);

@@ -1,6 +1,8 @@
---- a/drivers/net/wireless/ath/ath9k/main.c
-+++ b/drivers/net/wireless/ath/ath9k/main.c
-@@ -2805,6 +2805,8 @@ ath9k_get_feature_state(struct ieee80211
+Index: backports-6.9.9/drivers/net/wireless/ath/ath9k/main.c
+===================================================================
+--- backports-6.9.9.orig/drivers/net/wireless/ath/ath9k/main.c
++++ backports-6.9.9/drivers/net/wireless/ath/ath9k/main.c
+@@ -2818,6 +2818,8 @@ ath9k_get_feature_state(struct ieee80211
  	switch (feature) {
  	case IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY:
  		return (s16)(!(sc->sc_ah->common.disable_ani));
@@ -9,7 +11,7 @@
  	default:
  		return S16_MIN;
  	}
-@@ -2824,6 +2826,17 @@ ath9k_set_feature_state(struct ieee80211
+@@ -2837,6 +2839,17 @@ ath9k_set_feature_state(struct ieee80211
  	case IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY:
  		ath9k_set_ani(sc, !!state);
  		break;
@@ -27,8 +29,10 @@
  	default:
  		return -1;
  	}
---- a/drivers/net/wireless/ath/ath9k/init.c
-+++ b/drivers/net/wireless/ath/ath9k/init.c
+Index: backports-6.9.9/drivers/net/wireless/ath/ath9k/init.c
+===================================================================
+--- backports-6.9.9.orig/drivers/net/wireless/ath/ath9k/init.c
++++ backports-6.9.9/drivers/net/wireless/ath/ath9k/init.c
 @@ -1036,6 +1036,7 @@ static void ath9k_set_hw_capab(struct at
  	hw->extra_tx_headroom = 4;
  

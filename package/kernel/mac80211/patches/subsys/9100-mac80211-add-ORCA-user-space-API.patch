@@ -1,6 +1,8 @@
---- a/net/mac80211/rx.c
-+++ b/net/mac80211/rx.c
-@@ -32,6 +32,7 @@
+Index: backports-6.9.9/net/mac80211/rx.c
+===================================================================
+--- backports-6.9.9.orig/net/mac80211/rx.c
++++ backports-6.9.9/net/mac80211/rx.c
+@@ -33,6 +33,7 @@
  #include "tkip.h"
  #include "wme.h"
  #include "rate.h"
@@ -8,7 +10,7 @@
  
  /*
   * monitor mode reception
-@@ -1778,6 +1779,12 @@ ieee80211_rx_h_sta_process(struct ieee80
+@@ -1805,6 +1806,12 @@ ieee80211_rx_h_sta_process(struct ieee80
  		}
  	}
  
@@ -21,19 +23,23 @@
  	if (ieee80211_is_s1g_beacon(hdr->frame_control))
  		return RX_CONTINUE;
  
---- a/local-symbols
-+++ b/local-symbols
-@@ -41,6 +41,7 @@ LIB80211_DEBUG=
+Index: backports-6.9.9/local-symbols
+===================================================================
+--- backports-6.9.9.orig/local-symbols
++++ backports-6.9.9/local-symbols
+@@ -34,6 +34,7 @@ LIB80211_DEBUG=
  MAC80211=
  MAC80211_HAS_RC=
  MAC80211_RC_MINSTREL=
 +MAC80211_ORCA_UAPI=
  MAC80211_RC_DEFAULT_MINSTREL=
  MAC80211_RC_DEFAULT=
- MAC80211_MESH=
---- a/net/mac80211/Kconfig
-+++ b/net/mac80211/Kconfig
-@@ -98,6 +98,15 @@ config MAC80211_MESSAGE_TRACING
+ MAC80211_KUNIT_TEST=
+Index: backports-6.9.9/net/mac80211/Kconfig
+===================================================================
+--- backports-6.9.9.orig/net/mac80211/Kconfig
++++ backports-6.9.9/net/mac80211/Kconfig
+@@ -109,6 +109,15 @@ config MAC80211_MESSAGE_TRACING
  	  need to be present in the binary and formatted at
  	  runtime for tracing.
  
@@ -49,8 +55,10 @@
  menuconfig MAC80211_DEBUG_MENU
  	bool "Select mac80211 debugging features"
  	depends on MAC80211
---- a/net/mac80211/Makefile
-+++ b/net/mac80211/Makefile
+Index: backports-6.9.9/net/mac80211/Makefile
+===================================================================
+--- backports-6.9.9.orig/net/mac80211/Makefile
++++ backports-6.9.9/net/mac80211/Makefile
 @@ -63,6 +63,9 @@ rc80211_minstrel-y := \
  rc80211_minstrel-$(CPTCFG_MAC80211_DEBUGFS) += \
  	rc80211_minstrel_ht_debugfs.o
@@ -60,9 +68,11 @@
 +
  mac80211-$(CPTCFG_MAC80211_RC_MINSTREL) += $(rc80211_minstrel-y)
  
- ccflags-y += -DDEBUG
---- a/net/mac80211/rc80211_minstrel_ht.c
-+++ b/net/mac80211/rc80211_minstrel_ht.c
+ obj-y += tests/
+Index: backports-6.9.9/net/mac80211/rc80211_minstrel_ht.c
+===================================================================
+--- backports-6.9.9.orig/net/mac80211/rc80211_minstrel_ht.c
++++ backports-6.9.9/net/mac80211/rc80211_minstrel_ht.c
 @@ -264,7 +264,7 @@ const struct mcs_group minstrel_mcs_grou
  
  const s16 minstrel_cck_bitrates[4] = { 10, 20, 55, 110 };
@@ -407,7 +417,7 @@
  
  	mi->sta = sta;
  	mi->band = sband->band;
-@@ -1800,7 +1867,11 @@ minstrel_ht_update_caps(void *priv, stru
+@@ -1799,7 +1866,11 @@ minstrel_ht_update_caps(void *priv, stru
  
  	/* create an initial rate table with the lowest supported rates */
  	minstrel_ht_update_stats(mp, mi);
@@ -420,7 +430,7 @@
  }
  
  static void
-@@ -1836,12 +1907,30 @@ minstrel_ht_alloc_sta(void *priv, struct
+@@ -1835,12 +1906,30 @@ minstrel_ht_alloc_sta(void *priv, struct
  			max_rates = sband->n_bitrates;
  	}
  
@@ -452,7 +462,7 @@
  	kfree(priv_sta);
  }
  
-@@ -1931,7 +2020,6 @@ minstrel_ht_alloc(struct ieee80211_hw *h
+@@ -1930,7 +2019,6 @@ minstrel_ht_alloc(struct ieee80211_hw *h
  		mp->max_retry = 7;
  
  	mp->hw = hw;
@@ -460,7 +470,7 @@
  
  	minstrel_ht_init_cck_rates(mp);
  	for (i = 0; i < ARRAY_SIZE(mp->hw->wiphy->bands); i++)
-@@ -1941,6 +2029,7 @@ minstrel_ht_alloc(struct ieee80211_hw *h
+@@ -1940,6 +2028,7 @@ minstrel_ht_alloc(struct ieee80211_hw *h
  }
  
  #ifdef CPTCFG_MAC80211_DEBUGFS
@@ -468,7 +478,7 @@
  static void minstrel_ht_add_debugfs(struct ieee80211_hw *hw, void *priv,
  				    struct dentry *debugfsdir)
  {
-@@ -1949,12 +2038,15 @@ static void minstrel_ht_add_debugfs(stru
+@@ -1948,12 +2037,15 @@ static void minstrel_ht_add_debugfs(stru
  	mp->fixed_rate_idx = (u32) -1;
  	debugfs_create_u32("fixed_rate_idx", S_IRUGO | S_IWUGO, debugfsdir,
  			   &mp->fixed_rate_idx);
@@ -484,8 +494,10 @@
  	kfree(priv);
  }
  
---- a/net/mac80211/rc80211_minstrel_ht.h
-+++ b/net/mac80211/rc80211_minstrel_ht.h
+Index: backports-6.9.9/net/mac80211/rc80211_minstrel_ht.h
+===================================================================
+--- backports-6.9.9.orig/net/mac80211/rc80211_minstrel_ht.h
++++ backports-6.9.9/net/mac80211/rc80211_minstrel_ht.h
 @@ -70,7 +70,13 @@
  #define MI_RATE_GROUP(_rate) FIELD_GET(MI_RATE_GROUP_MASK, _rate)
  
@@ -688,8 +700,10 @@
 +void minstrel_ht_update_stats(struct minstrel_priv *mp, struct minstrel_ht_sta *mi);
  
  #endif
+Index: backports-6.9.9/net/mac80211/orca_uapi.c
+===================================================================
 --- /dev/null
-+++ b/net/mac80211/orca_uapi.c
++++ backports-6.9.9/net/mac80211/orca_uapi.c
 @@ -0,0 +1,1337 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
