@@ -1,6 +1,6 @@
 --- a/include/net/mac80211.h
 +++ b/include/net/mac80211.h
-@@ -3716,10 +3716,15 @@ struct ieee80211_prep_tx_info {
+@@ -3719,10 +3719,15 @@ struct ieee80211_prep_tx_info {
   * @IEEE80211_FTRCTL_ADAPTIVE_SENSITIVITY: Adaptive sensitivity to
   * 	dynamically adjust the receive sensitivity by a certain algorithm.
   *

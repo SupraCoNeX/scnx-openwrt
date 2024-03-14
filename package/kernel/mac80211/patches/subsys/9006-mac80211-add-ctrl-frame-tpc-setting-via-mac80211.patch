@@ -1,6 +1,6 @@
 --- a/include/net/mac80211.h
 +++ b/include/net/mac80211.h
-@@ -3713,18 +3713,27 @@ struct ieee80211_prep_tx_info {
+@@ -3716,18 +3716,27 @@ struct ieee80211_prep_tx_info {
   * and the driver ops get_feature_state and set_feature_state to dynamically
   * control the state of a particular feature at runtime.
   *
