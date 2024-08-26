@@ -28,10 +28,8 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
  include/net/mac80211.h | 33 +++++++++++++++++++++++++++------
  1 file changed, 27 insertions(+), 6 deletions(-)
 
-Index: backports-6.9.9/include/net/mac80211.h
-===================================================================
---- backports-6.9.9.orig/include/net/mac80211.h
-+++ backports-6.9.9/include/net/mac80211.h
+--- a/include/net/mac80211.h
++++ b/include/net/mac80211.h
 @@ -1264,14 +1264,14 @@ ieee80211_info_get_tx_time_est(struct ie
   *
   * @rate_idx The actual used rate.
@@ -113,10 +111,8 @@ Index: backports-6.9.9/include/net/mac80211.h
  /**
   * struct ieee80211_scan_request - hw scan request
   *
-Index: backports-6.9.9/net/mac80211/util.c
-===================================================================
---- backports-6.9.9.orig/net/mac80211/util.c
-+++ backports-6.9.9/net/mac80211/util.c
+--- a/net/mac80211/util.c
++++ b/net/mac80211/util.c
 @@ -4368,3 +4368,22 @@ ieee80211_min_bw_limit_from_chandef(stru
  		return IEEE80211_CONN_BW_LIMIT_20;
  	}

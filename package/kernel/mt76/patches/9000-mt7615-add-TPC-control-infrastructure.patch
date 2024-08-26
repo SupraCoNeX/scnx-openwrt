@@ -1,7 +1,5 @@
-Index: mt76-2024.07.13~3b47d9df/mt7615/mac.c
-===================================================================
---- mt76-2024.07.13~3b47d9df.orig/mt7615/mac.c
-+++ mt76-2024.07.13~3b47d9df/mt7615/mac.c
+--- a/mt7615/mac.c
++++ b/mt7615/mac.c
 @@ -732,6 +732,8 @@ int mt7615_mac_write_txwi(struct mt7615_
  	__le16 fc = hdr->frame_control;
  	int tx_count = 8;
@@ -35,11 +33,9 @@ Index: mt76-2024.07.13~3b47d9df/mt7615/mac.c
  	txwi[2] = cpu_to_le32(val);
  
  	if (!(info->flags & IEEE80211_TX_CTL_AMPDU))
-Index: mt76-2024.07.13~3b47d9df/mt7615/main.c
-===================================================================
---- mt76-2024.07.13~3b47d9df.orig/mt7615/main.c
-+++ mt76-2024.07.13~3b47d9df/mt7615/main.c
-@@ -733,6 +733,9 @@ static void mt7615_sta_rate_tbl_update(s
+--- a/mt7615/main.c
++++ b/mt7615/main.c
+@@ -720,6 +720,9 @@ static void mt7615_sta_rate_tbl_update(s
  		msta->rates[i].count = sta_rates->rate[i].count;
  		msta->rates[i].flags = sta_rates->rate[i].flags;
  
@@ -49,10 +45,8 @@ Index: mt76-2024.07.13~3b47d9df/mt7615/main.c
  		if (msta->rates[i].idx < 0 || !msta->rates[i].count)
  			break;
  	}
-Index: mt76-2024.07.13~3b47d9df/mt7615/mt7615.h
-===================================================================
---- mt76-2024.07.13~3b47d9df.orig/mt7615/mt7615.h
-+++ mt76-2024.07.13~3b47d9df/mt7615/mt7615.h
+--- a/mt7615/mt7615.h
++++ b/mt7615/mt7615.h
 @@ -128,6 +128,7 @@ struct mt7615_sta {
  	u32 airtime_ac[8];
  
@@ -69,10 +63,8 @@ Index: mt76-2024.07.13~3b47d9df/mt7615/mt7615.h
  
  	unsigned long last_cca_adj;
  	int false_cca_ofdm, false_cca_cck;
-Index: mt76-2024.07.13~3b47d9df/mt7615/debugfs.c
-===================================================================
---- mt76-2024.07.13~3b47d9df.orig/mt7615/debugfs.c
-+++ mt76-2024.07.13~3b47d9df/mt7615/debugfs.c
+--- a/mt7615/debugfs.c
++++ b/mt7615/debugfs.c
 @@ -93,6 +93,29 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_scs, mt761
  			 mt7615_scs_set, "%lld\n");
  
@@ -111,10 +103,8 @@ Index: mt76-2024.07.13~3b47d9df/mt7615/debugfs.c
  	debugfs_create_file("dbdc", 0600, dir, dev, &fops_dbdc);
  	debugfs_create_file("fw_debug", 0600, dir, dev, &fops_fw_debug);
  	debugfs_create_file("runtime-pm", 0600, dir, dev, &fops_pm);
-Index: mt76-2024.07.13~3b47d9df/mt7615/init.c
-===================================================================
---- mt76-2024.07.13~3b47d9df.orig/mt7615/init.c
-+++ mt76-2024.07.13~3b47d9df/mt7615/init.c
+--- a/mt7615/init.c
++++ b/mt7615/init.c
 @@ -353,6 +353,13 @@ mt7615_regd_notifier(struct wiphy *wiphy
  	mt7615_mutex_release(dev);
  }
