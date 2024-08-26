@@ -11,7 +11,7 @@
  static void
 --- a/mt7615/main.c
 +++ b/mt7615/main.c
-@@ -1347,6 +1347,10 @@ static s16 mt7615_get_feature_state(stru
+@@ -1334,6 +1334,10 @@ static s16 mt7615_get_feature_state(stru
  	switch (feature) {
  	case IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY:
  		return (s16)dev->phy.scs_en;
@@ -22,7 +22,7 @@
  	default:
  		return S16_MIN;
  	}
-@@ -1365,6 +1369,19 @@ static int mt7615_set_feature_state(stru
+@@ -1352,6 +1356,19 @@ static int mt7615_set_feature_state(stru
  	switch (feature) {
  	case IEEE80211_FTRCTRL_ADAPTIVE_SENSITIVITY:
  		return mt7615_set_scs(dev, enable);

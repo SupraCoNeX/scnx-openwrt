@@ -15,10 +15,8 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
  net/mac80211/debugfs.c | 2 ++
  2 files changed, 11 insertions(+)
 
-Index: backports-6.9.9/include/net/mac80211.h
-===================================================================
---- backports-6.9.9.orig/include/net/mac80211.h
-+++ backports-6.9.9/include/net/mac80211.h
+--- a/include/net/mac80211.h
++++ b/include/net/mac80211.h
 @@ -2796,6 +2796,13 @@ struct ieee80211_txq {
   *	implements MLO, so operation can continue on other links when one
   *	link is switching.
@@ -42,10 +40,8 @@ Index: backports-6.9.9/include/net/mac80211.h
  
  	/* keep last, obviously */
  	NUM_IEEE80211_HW_FLAGS
-Index: backports-6.9.9/net/mac80211/debugfs.c
-===================================================================
---- backports-6.9.9.orig/net/mac80211/debugfs.c
-+++ backports-6.9.9/net/mac80211/debugfs.c
+--- a/net/mac80211/debugfs.c
++++ b/net/mac80211/debugfs.c
 @@ -508,6 +508,8 @@ static const char *hw_flag_names[] = {
  	FLAG(MLO_MCAST_MULTI_LINK_TX),
  	FLAG(DISALLOW_PUNCTURING),
@@ -55,10 +51,8 @@ Index: backports-6.9.9/net/mac80211/debugfs.c
  #undef FLAG
  };
  
-Index: backports-6.9.9/net/mac80211/main.c
-===================================================================
---- backports-6.9.9.orig/net/mac80211/main.c
-+++ backports-6.9.9/net/mac80211/main.c
+--- a/net/mac80211/main.c
++++ b/net/mac80211/main.c
 @@ -1180,6 +1180,11 @@ int ieee80211_register_hw(struct ieee802
  			return -EINVAL;
  	}
