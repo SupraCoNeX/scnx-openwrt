@@ -1214,7 +1214,7 @@
 +	if (!cur)
 +		return -EINVAL;
 +
-+	strncpy(buf, cur, sizeof(buf));
++	strncpy(buf, params, sizeof(buf));
 +	buf[sizeof(buf) - 1] = 0;
 +	ref = buf;
 +
@@ -1254,7 +1254,7 @@
 +	if (!cur)
 +		return -EINVAL;
 +
-+	strncpy(buf, cur, sizeof(buf));
++	strncpy(buf, params, sizeof(buf));
 +	buf[sizeof(buf) - 1] = 0;
 +	ref = buf;
 +
