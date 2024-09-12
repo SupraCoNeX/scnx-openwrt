@@ -8,19 +8,21 @@
  
  /*
   * monitor mode reception
-@@ -1805,6 +1806,12 @@ ieee80211_rx_h_sta_process(struct ieee80
- 		}
- 	}
+@@ -5452,6 +5453,14 @@ void ieee80211_rx_list(struct ieee80211_
+ 			ieee80211_is_data_present(hdr->frame_control))
+ 			ieee80211_tpt_led_trig_rx(local, skb->len);
  
-+	if (rx->local->rate_ctrl && test_sta_flag(sta, WLAN_STA_RATE_CONTROL)) {
-+		orca_report_rx_status(rx->local->rate_ctrl->priv, sta,
-+			(!(status->flag & RX_FLAG_NO_SIGNAL_VAL) ? status->signal : -1),
-+			status->chains, status->chain_signal);
-+	}
++		if (pubsta && local->rate_ctrl) {
++			struct sta_info *sta = container_of(pubsta, struct sta_info, sta);
 +
- 	if (ieee80211_is_s1g_beacon(hdr->frame_control))
- 		return RX_CONTINUE;
- 
++			if (test_sta_flag(sta, WLAN_STA_RATE_CONTROL)) {
++				orca_report_rx_status(local->rate_ctrl->priv, sta, status);
++			}
++		}
++
+ 		if (status->flag & RX_FLAG_8023)
+ 			__ieee80211_rx_handle_8023(hw, pubsta, skb, list);
+ 		else
 --- a/local-symbols
 +++ b/local-symbols
 @@ -34,6 +34,7 @@ LIB80211_DEBUG=
@@ -546,7 +548,7 @@
  
  	/* ampdu length (average, per sampling interval) */
  	unsigned int ampdu_len;
-@@ -193,10 +212,174 @@ struct minstrel_ht_sta {
+@@ -193,10 +212,177 @@ struct minstrel_ht_sta {
  
  	/* MCS rate group info and statistics */
  	struct minstrel_mcs_group_data groups[MINSTREL_GROUPS_NB];
@@ -626,13 +628,16 @@
 +
 +static inline void
 +orca_report_rx_status(struct minstrel_priv *mp, struct sta_info *sta,
-+		      s8 last_signal, u8 chain_status, s8 *chain_signal)
++		      struct ieee80211_rx_status *status)
 +{
 +#ifdef CPTCFG_MAC80211_ORCA_UAPI
 +	if (!(sta->sdata->orca_monitor & ORCA_MONITOR_RXS))
 +		return;
 +
-+	__orca_report_rx_status(mp, sta->addr, last_signal, chain_status, chain_signal);
++	__orca_report_rx_status(mp, sta->addr,
++				(!(status->flag & RX_FLAG_NO_SIGNAL_VAL) ? status->signal : -1),
++				status->chains,
++				status->chain_signal);
 +#endif
 +}
 +
