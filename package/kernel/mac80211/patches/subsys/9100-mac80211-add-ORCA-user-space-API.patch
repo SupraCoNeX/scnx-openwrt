@@ -728,7 +728,7 @@
  #endif
 --- /dev/null
 +++ b/net/mac80211/orca_uapi.c
-@@ -0,0 +1,1369 @@
+@@ -0,0 +1,1368 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * ORCA - Open-Source Resource Control API
@@ -1206,7 +1206,7 @@
 +	struct ieee80211_local *local = hw_to_local(mp->hw);
 +	struct ieee80211_sub_if_data *sdata;
 +	char buf[32], *cur, *ref;
-+	int ret, i = 0;
++	int ret;
 +	u8 mask;
 +	bool all;
 +
@@ -1773,7 +1773,6 @@
 +static int
 +orca_process_cmd(struct minstrel_priv *mp, orca_cmd cmd, char *args)
 +{
-+	char buf[128];
 +	int err = 0;
 +
 +	switch (cmd) {
