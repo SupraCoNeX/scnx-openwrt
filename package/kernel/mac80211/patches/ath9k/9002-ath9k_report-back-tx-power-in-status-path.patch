@@ -1,7 +1,5 @@
-Index: backports-6.9.9/drivers/net/wireless/ath/ath9k/xmit.c
-===================================================================
---- backports-6.9.9.orig/drivers/net/wireless/ath/ath9k/xmit.c
-+++ backports-6.9.9/drivers/net/wireless/ath/ath9k/xmit.c
+--- a/drivers/net/wireless/ath/ath9k/xmit.c
++++ b/drivers/net/wireless/ath/ath9k/xmit.c
 @@ -57,7 +57,7 @@ static void ath_tx_send_normal(struct at
  			       struct ath_atx_tid *tid, struct sk_buff *skb);
  static void ath_tx_complete(struct ath_softc *sc, struct sk_buff *skb,
@@ -109,10 +107,8 @@ Index: backports-6.9.9/drivers/net/wireless/ath/ath9k/xmit.c
  	}
  skip_tx_complete:
  	/* At this point, skb (bf->bf_mpdu) is consumed...make sure we don't
-Index: backports-6.9.9/drivers/net/wireless/ath/ath9k/mac.h
-===================================================================
---- backports-6.9.9.orig/drivers/net/wireless/ath/ath9k/mac.h
-+++ backports-6.9.9/drivers/net/wireless/ath/ath9k/mac.h
+--- a/drivers/net/wireless/ath/ath9k/mac.h
++++ b/drivers/net/wireless/ath/ath9k/mac.h
 @@ -125,6 +125,22 @@ struct ath_tx_status {
  	u32 duration;
  };

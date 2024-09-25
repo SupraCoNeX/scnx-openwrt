@@ -1,7 +1,5 @@
-Index: backports-6.9.9/drivers/net/wireless/ath/ath9k/debug.c
-===================================================================
---- backports-6.9.9.orig/drivers/net/wireless/ath/ath9k/debug.c
-+++ backports-6.9.9/drivers/net/wireless/ath/ath9k/debug.c
+--- a/drivers/net/wireless/ath/ath9k/debug.c
++++ b/drivers/net/wireless/ath/ath9k/debug.c
 @@ -1242,6 +1242,102 @@ static const struct file_operations fops
  	.llseek = default_llseek,
  };

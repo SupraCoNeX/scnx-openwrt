@@ -1,7 +1,5 @@
-Index: backports-6.9.9/drivers/net/wireless/ath/ath9k/init.c
-===================================================================
---- backports-6.9.9.orig/drivers/net/wireless/ath/ath9k/init.c
-+++ backports-6.9.9/drivers/net/wireless/ath/ath9k/init.c
+--- a/drivers/net/wireless/ath/ath9k/init.c
++++ b/drivers/net/wireless/ath/ath9k/init.c
 @@ -1027,6 +1027,8 @@ static void ath9k_set_hw_capab(struct at
  	hw->txq_data_size = sizeof(struct ath_atx_tid);
  	hw->extra_tx_headroom = 4;
@@ -11,10 +9,8 @@ Index: backports-6.9.9/drivers/net/wireless/ath/ath9k/init.c
  	hw->wiphy->available_antennas_rx = BIT(ah->caps.max_rxchains) - 1;
  	hw->wiphy->available_antennas_tx = BIT(ah->caps.max_txchains) - 1;
  
-Index: backports-6.9.9/drivers/net/wireless/ath/ath9k/main.c
-===================================================================
---- backports-6.9.9.orig/drivers/net/wireless/ath/ath9k/main.c
-+++ backports-6.9.9/drivers/net/wireless/ath/ath9k/main.c
+--- a/drivers/net/wireless/ath/ath9k/main.c
++++ b/drivers/net/wireless/ath/ath9k/main.c
 @@ -2796,6 +2796,54 @@ static int ath9k_get_txpower(struct ieee
  	return 0;
  }
