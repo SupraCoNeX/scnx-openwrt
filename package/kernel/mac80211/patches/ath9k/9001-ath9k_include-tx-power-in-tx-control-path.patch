@@ -1,7 +1,5 @@
-Index: backports-6.9.9/drivers/net/wireless/ath/ath9k/ath9k.h
-===================================================================
---- backports-6.9.9.orig/drivers/net/wireless/ath/ath9k/ath9k.h
-+++ backports-6.9.9/drivers/net/wireless/ath/ath9k/ath9k.h
+--- a/drivers/net/wireless/ath/ath9k/ath9k.h
++++ b/drivers/net/wireless/ath/ath9k/ath9k.h
 @@ -229,6 +229,7 @@ struct ath_buf {
  	dma_addr_t bf_daddr;		/* physical addr of desc */
  	dma_addr_t bf_buf_addr;	/* physical addr of data buffer, for DMA */
@@ -10,10 +8,8 @@ Index: backports-6.9.9/drivers/net/wireless/ath/ath9k/ath9k.h
  	struct ath_buf_state bf_state;
  };
  
-Index: backports-6.9.9/drivers/net/wireless/ath/ath9k/xmit.c
-===================================================================
---- backports-6.9.9.orig/drivers/net/wireless/ath/ath9k/xmit.c
-+++ backports-6.9.9/drivers/net/wireless/ath/ath9k/xmit.c
+--- a/drivers/net/wireless/ath/ath9k/xmit.c
++++ b/drivers/net/wireless/ath/ath9k/xmit.c
 @@ -179,6 +179,7 @@ static bool ath_merge_ratetbl(struct iee
  		i = 0;
  	} else {

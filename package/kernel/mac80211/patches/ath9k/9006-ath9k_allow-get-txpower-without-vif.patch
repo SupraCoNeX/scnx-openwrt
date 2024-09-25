@@ -1,7 +1,5 @@
-Index: backports-6.9.9/drivers/net/wireless/ath/ath9k/main.c
-===================================================================
---- backports-6.9.9.orig/drivers/net/wireless/ath/ath9k/main.c
-+++ backports-6.9.9/drivers/net/wireless/ath/ath9k/main.c
+--- a/drivers/net/wireless/ath/ath9k/main.c
++++ b/drivers/net/wireless/ath/ath9k/main.c
 @@ -2782,10 +2782,13 @@ static int ath9k_get_txpower(struct ieee
  			     int *dbm)
  {
