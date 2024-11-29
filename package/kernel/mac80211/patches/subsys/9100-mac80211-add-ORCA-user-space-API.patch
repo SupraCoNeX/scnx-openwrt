@@ -8,7 +8,7 @@
  
  /*
   * monitor mode reception
-@@ -5452,6 +5453,14 @@ void ieee80211_rx_list(struct ieee80211_
+@@ -5463,6 +5464,14 @@ void ieee80211_rx_list(struct ieee80211_
  			ieee80211_is_data_present(hdr->frame_control))
  			ieee80211_tpt_led_trig_rx(local, skb->len);
  
@@ -2099,7 +2099,7 @@
 +}
 --- a/net/mac80211/ieee80211_i.h
 +++ b/net/mac80211/ieee80211_i.h
-@@ -1171,6 +1171,9 @@ struct ieee80211_sub_if_data {
+@@ -1186,6 +1186,9 @@ struct ieee80211_sub_if_data {
  		struct dentry *default_beacon_key;
  	} debugfs;
  #endif

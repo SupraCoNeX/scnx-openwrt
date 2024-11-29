@@ -8,7 +8,7 @@
 +	s8 txwi_power_ofs = 0;
  
  	if (vif) {
- 		struct mt76_vif *mvif = (struct mt76_vif *)vif->drv_priv;
+ 		struct mt76_vif_link *mvif = (struct mt76_vif_link *)vif->drv_priv;
 @@ -744,6 +746,7 @@ int mt7615_mac_write_txwi(struct mt7615_
  		struct mt7615_sta *msta = (struct mt7615_sta *)sta->drv_priv;
  
@@ -35,7 +35,7 @@
  	if (!(info->flags & IEEE80211_TX_CTL_AMPDU))
 --- a/mt7615/main.c
 +++ b/mt7615/main.c
-@@ -720,6 +720,9 @@ static void mt7615_sta_rate_tbl_update(s
+@@ -719,6 +719,9 @@ static void mt7615_sta_rate_tbl_update(s
  		msta->rates[i].count = sta_rates->rate[i].count;
  		msta->rates[i].flags = sta_rates->rate[i].flags;
  
@@ -105,7 +105,7 @@
  	debugfs_create_file("runtime-pm", 0600, dir, dev, &fops_pm);
 --- a/mt7615/init.c
 +++ b/mt7615/init.c
-@@ -353,6 +353,13 @@ mt7615_regd_notifier(struct wiphy *wiphy
+@@ -356,6 +356,13 @@ mt7615_regd_notifier(struct wiphy *wiphy
  	mt7615_mutex_release(dev);
  }
  
@@ -119,7 +119,7 @@
  static void
  mt7615_init_wiphy(struct ieee80211_hw *hw)
  {
-@@ -402,6 +409,10 @@ mt7615_init_wiphy(struct ieee80211_hw *h
+@@ -405,6 +412,10 @@ mt7615_init_wiphy(struct ieee80211_hw *h
  	ieee80211_hw_set(hw, WANT_MONITOR_VIF);
  	ieee80211_hw_set(hw, SUPPORTS_RX_DECAP_OFFLOAD);
  	ieee80211_hw_set(hw, SUPPORTS_VHT_EXT_NSS_BW);

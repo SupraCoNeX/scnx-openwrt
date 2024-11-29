@@ -11,7 +11,7 @@
  		dev->mphy.leds.cdev.brightness_set = mt7603_led_set_brightness;
 --- a/mt7603/main.c
 +++ b/mt7603/main.c
-@@ -693,6 +693,38 @@ static void mt7603_tx(struct ieee80211_h
+@@ -691,6 +691,38 @@ static void mt7603_tx(struct ieee80211_h
  	mt76_tx(&dev->mphy, control->sta, wcid, skb);
  }
  
@@ -50,7 +50,7 @@
  const struct ieee80211_ops mt7603_ops = {
  	.add_chanctx = ieee80211_emulate_add_chanctx,
  	.remove_chanctx = ieee80211_emulate_remove_chanctx,
-@@ -723,6 +755,8 @@ const struct ieee80211_ops mt7603_ops =
+@@ -721,6 +753,8 @@ const struct ieee80211_ops mt7603_ops =
  	.get_survey = mt76_get_survey,
  	.get_antenna = mt76_get_antenna,
  	.set_sar_specs = mt7603_set_sar_specs,

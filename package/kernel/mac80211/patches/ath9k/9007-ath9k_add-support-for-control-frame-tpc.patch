@@ -85,7 +85,7 @@
  static ssize_t read_file_nf_override(struct file *file,
  				     char __user *user_buf,
  				     size_t count, loff_t *ppos)
-@@ -1657,8 +1735,10 @@ int ath9k_init_debug(struct ath_hw *ah)
+@@ -1655,8 +1733,10 @@ int ath9k_init_debug(struct ath_hw *ah)
  			    sc, &fops_ackto);
  #endif
  	debugfs_create_file("tpc", 0600, sc->debug.debugfs_phy, sc, &fops_tpc);

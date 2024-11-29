@@ -1,6 +1,6 @@
 --- a/mt7615/main.c
 +++ b/mt7615/main.c
-@@ -1312,6 +1312,51 @@ static void mt7615_set_rekey_data(struct
+@@ -1311,6 +1311,51 @@ static void mt7615_set_rekey_data(struct
  }
  #endif /* CONFIG_PM */
  
@@ -52,7 +52,7 @@
  const struct ieee80211_ops mt7615_ops = {
  	.add_chanctx = ieee80211_emulate_add_chanctx,
  	.remove_chanctx = ieee80211_emulate_remove_chanctx,
-@@ -1363,6 +1408,8 @@ const struct ieee80211_ops mt7615_ops =
+@@ -1362,6 +1407,8 @@ const struct ieee80211_ops mt7615_ops =
  	.set_rekey_data = mt7615_set_rekey_data,
  #endif /* CONFIG_PM */
  	.set_sar_specs = mt7615_set_sar_specs,
@@ -63,7 +63,7 @@
  
 --- a/mt7615/init.c
 +++ b/mt7615/init.c
-@@ -412,6 +412,8 @@ mt7615_init_wiphy(struct ieee80211_hw *h
+@@ -415,6 +415,8 @@ mt7615_init_wiphy(struct ieee80211_hw *h
  	phy->mt76->sband_5g.sband.ht_cap.cap |= IEEE80211_HT_CAP_LDPC_CODING;
  	phy->mt76->sband_5g.sband.vht_cap.cap |=
  			IEEE80211_VHT_CAP_MAX_A_MPDU_LENGTH_EXPONENT_MASK;
