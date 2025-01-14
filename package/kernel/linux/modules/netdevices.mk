@@ -575,32 +575,38 @@ endef
 
 $(eval $(call KernelPackage,dsa-b53-mdio))
 
-
-define KernelPackage/dsa-tag-dsa
+define KernelPackage/dsa-mv88e6060
   SUBMENU:=$(NETWORK_DEVICES_MENU)
-  TITLE:=Marvell DSA type DSA and EDSA taggers
-  DEPENDS:=+kmod-dsa
-  KCONFIG:= CONFIG_NET_DSA_TAG_DSA_COMMON \
-	CONFIG_NET_DSA_TAG_DSA \
-	CONFIG_NET_DSA_TAG_EDSA
-  FILES:=$(LINUX_DIR)/net/dsa/tag_dsa.ko
-  AUTOLOAD:=$(call AutoLoad,40,tag_dsa,1)
+  TITLE:=Marvell MV88E6060 DSA Switch
+  DEPENDS:=+kmod-dsa +kmod-phy-marvell
+  KCONFIG:=CONFIG_NET_DSA_TAG_TRAILER \
+  CONFIG_NET_DSA_MV88E6060
+  FILES:= \
+  $(LINUX_DIR)/drivers/net/dsa/mv88e6060.ko \
+  $(LINUX_DIR)/net/dsa/tag_trailer.ko
+  AUTOLOAD:=$(call AutoLoad,41,mv88e6060,1)
 endef
 
-define KernelPackage/dsa-tag-dsa/description
-  Kernel modules for Marvell DSA and EDSA tagging
+define KernelPackage/dsa-mv88e6060/description
+  Kernel modules for MV88E6060 DSA switches
 endef
 
-$(eval $(call KernelPackage,dsa-tag-dsa))
+$(eval $(call KernelPackage,dsa-mv88e6060))
 
 define KernelPackage/dsa-mv88e6xxx
   SUBMENU:=$(NETWORK_DEVICES_MENU)
   TITLE:=Marvell MV88E6XXX DSA Switch
-  DEPENDS:=+kmod-dsa +kmod-ptp +kmod-phy-marvell +kmod-dsa-tag-dsa
-  KCONFIG:=CONFIG_NET_DSA_MV88E6XXX \
+  DEPENDS:=+kmod-dsa +kmod-ptp +kmod-phy-marvell
+  KCONFIG:= \
+	CONFIG_NET_DSA_TAG_DSA_COMMON \
+	CONFIG_NET_DSA_TAG_DSA \
+	CONFIG_NET_DSA_TAG_EDSA \
+	CONFIG_NET_DSA_MV88E6XXX \
 	CONFIG_NET_DSA_MV88E6XXX_LEDS=y \
 	CONFIG_NET_DSA_MV88E6XXX_PTP=y
-  FILES:=$(LINUX_DIR)/drivers/net/dsa/mv88e6xxx/mv88e6xxx.ko
+  FILES:= \
+	$(LINUX_DIR)/net/dsa/tag_dsa.ko \
+	$(LINUX_DIR)/drivers/net/dsa/mv88e6xxx/mv88e6xxx.ko
   AUTOLOAD:=$(call AutoLoad,41,mv88e6xxx,1)
 endef
 
@@ -953,7 +959,7 @@ $(eval $(call KernelPackage,8139cp))
 define KernelPackage/r8169
   SUBMENU:=$(NETWORK_DEVICES_MENU)
   TITLE:=RealTek RTL-8169 PCI Gigabit Ethernet Adapter kernel support
-  DEPENDS:=@PCI_SUPPORT +kmod-mii +r8169-firmware +kmod-phy-realtek +kmod-mdio-devres
+  DEPENDS:=@PCI_SUPPORT +kmod-mii +r8169-firmware +kmod-phy-realtek +kmod-mdio-devres +kmod-hwmon-core
   KCONFIG:= \
     CONFIG_R8169 \
     CONFIG_R8169_LEDS=y
@@ -1524,6 +1530,28 @@ define KernelPackage/bnx2x/description
 endef
 
 $(eval $(call KernelPackage,bnx2x))
+
+define KernelPackage/bnxt-en
+  SUBMENU:=$(NETWORK_DEVICES_MENU)
+  TITLE:=Broadcom NetXtreme-C/E network driver
+  DEPENDS:=@PCI_SUPPORT +kmod-hwmon-core +kmod-lib-crc32c +kmod-mdio +kmod-ptp
+  FILES:=$(LINUX_DIR)/drivers/net/ethernet/broadcom/bnxt/bnxt_en.ko
+  KCONFIG:= \
+	  CONFIG_BNXT \
+	  CONFIG_BNXT_SRIOV=y \
+	  CONFIG_BNXT_FLOWER_OFFLOAD=y \
+	  CONFIG_BNXT_DCB=n \
+	  CONFIG_BNXT_HWMON=y
+  AUTOLOAD:=$(call AutoProbe,bnxt_en)
+endef
+
+define KernelPackage/bnxt-en/description
+  Supports Broadcom NetXtreme-C/E based Ethernet NICs including:
+  * BCM573xx
+  * BCM574xx
+endef
+
+$(eval $(call KernelPackage,bnxt-en))
 
 define KernelPackage/be2net
   SUBMENU:=$(NETWORK_DEVICES_MENU)

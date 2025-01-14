@@ -437,7 +437,7 @@ function device_extended_features(data, flag) {
 }
 
 function device_capabilities(phy) {
-	let idx = +substr(phy, 3, 1);;
+	let idx = +fs.readfile(`/sys/class/ieee80211/${phy}/index`);
 	phy = nl80211.request(nl80211.const.NL80211_CMD_GET_WIPHY, nl80211.const.NLM_F_DUMP, { wiphy: idx, split_wiphy_dump: true });
 	if (!phy)
 		return;
@@ -493,7 +493,7 @@ function generate(config) {
 	if (!phy_features.radar_background || config.band != '5g')
 		delete config.enable_background_radar;
 	else
-		set_default(config, 'enable_background_radar', phy_features.radar_background);
+		set_default(config, 'enable_background_radar', false);
 
 	append_vars(config, [ 'acs_chan_bias', 'acs_exclude_dfs', 'enable_background_radar' ]);
 
