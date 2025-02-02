@@ -50,7 +50,7 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
   * This structure is placed in skb->cb for three uses:
 --- a/net/mac80211/util.c
 +++ b/net/mac80211/util.c
-@@ -4472,3 +4472,36 @@ ieee80211_hw_get_max_txpower_idx(struct
+@@ -4471,3 +4471,36 @@ ieee80211_hw_get_max_txpower_idx(struct
  	return (s16)max_idx;
  }
  EXPORT_SYMBOL(ieee80211_hw_get_max_txpower_idx);

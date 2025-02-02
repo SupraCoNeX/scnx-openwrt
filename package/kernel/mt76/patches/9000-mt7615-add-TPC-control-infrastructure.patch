@@ -1,6 +1,6 @@
 --- a/mt7615/mac.c
 +++ b/mt7615/mac.c
-@@ -732,6 +732,8 @@ int mt7615_mac_write_txwi(struct mt7615_
+@@ -728,6 +728,8 @@ int mt7615_mac_write_txwi(struct mt7615_
  	__le16 fc = hdr->frame_control;
  	int tx_count = 8;
  	u16 seqno = 0;
@@ -9,7 +9,7 @@
  
  	if (vif) {
  		struct mt76_vif_link *mvif = (struct mt76_vif_link *)vif->drv_priv;
-@@ -744,6 +746,7 @@ int mt7615_mac_write_txwi(struct mt7615_
+@@ -740,6 +742,7 @@ int mt7615_mac_write_txwi(struct mt7615_
  		struct mt7615_sta *msta = (struct mt7615_sta *)sta->drv_priv;
  
  		tx_count = msta->rate_count;
@@ -17,7 +17,7 @@
  	}
  
  	if (phy_idx && dev->mt76.phys[MT_BAND1])
-@@ -794,6 +797,15 @@ int mt7615_mac_write_txwi(struct mt7615_
+@@ -790,6 +793,15 @@ int mt7615_mac_write_txwi(struct mt7615_
  	} else {
  		txwi[3] = 0;
  	}

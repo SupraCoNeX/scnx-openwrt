@@ -64,7 +64,7 @@ Signed-off-by: Thomas Huehn <thomas.huehn@hs-nordhausen.de>
  	debugfs_create_file("dbdc", 0600, dir, dev, &fops_dbdc);
 --- a/mt7615/mac.c
 +++ b/mt7615/mac.c
-@@ -1001,6 +1001,9 @@ mt7615_mac_update_rate_desc(struct mt761
+@@ -997,6 +997,9 @@ mt7615_mac_update_rate_desc(struct mt761
  		if ((ref->flags ^ rates[i].flags) & IEEE80211_TX_RC_SHORT_GI)
  			rates[i].flags ^= IEEE80211_TX_RC_SHORT_GI;
  
