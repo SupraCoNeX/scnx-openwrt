@@ -1216,7 +1216,7 @@
 +	bool all;
 +
 +	cur = strsep(&params, ";");
-+	if (!cur)
++	if (!cur || !params)
 +		return -EINVAL;
 +
 +	strncpy(buf, params, sizeof(buf));
@@ -1256,7 +1256,7 @@
 +	bool all;
 +
 +	cur = strsep(&params, ";");
-+	if (!cur)
++	if (!cur || !params)
 +		return -EINVAL;
 +
 +	strncpy(buf, params, sizeof(buf));
@@ -2107,7 +2107,7 @@
 +}
 --- a/net/mac80211/ieee80211_i.h
 +++ b/net/mac80211/ieee80211_i.h
-@@ -1186,6 +1186,9 @@ struct ieee80211_sub_if_data {
+@@ -1184,6 +1184,9 @@ struct ieee80211_sub_if_data {
  		struct dentry *default_beacon_key;
  	} debugfs;
  #endif
