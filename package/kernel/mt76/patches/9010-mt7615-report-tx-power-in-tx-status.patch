@@ -74,7 +74,7 @@
 +	s8 base_power, power_idx;
 +
 +	nss = hweight8(phy->antenna_mask);
-+	delta = mt76_tx_power_nss_delta(nss);
++	delta = mt76_tx_power_path_delta(nss);
 +	max_power = phy->txpower_cur + delta;
 +
 +	base_power = -10;
