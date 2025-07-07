@@ -1,6 +1,6 @@
 --- a/drivers/net/wireless/ath/ath9k/debug.c
 +++ b/drivers/net/wireless/ath/ath9k/debug.c
-@@ -1242,6 +1242,102 @@ static const struct file_operations fops
+@@ -1243,6 +1243,102 @@ static const struct file_operations fops
  	.llseek = default_llseek,
  };
  
@@ -103,7 +103,7 @@
  static ssize_t read_file_nf_override(struct file *file,
  				     char __user *user_buf,
  				     size_t count, loff_t *ppos)
-@@ -1559,6 +1655,7 @@ int ath9k_init_debug(struct ath_hw *ah)
+@@ -1560,6 +1656,7 @@ int ath9k_init_debug(struct ath_hw *ah)
  			    sc, &fops_ackto);
  #endif
  	debugfs_create_file("tpc", 0600, sc->debug.debugfs_phy, sc, &fops_tpc);

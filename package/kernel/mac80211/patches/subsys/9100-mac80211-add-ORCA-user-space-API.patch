@@ -8,7 +8,7 @@
  
  /*
   * monitor mode reception
-@@ -5463,6 +5464,14 @@ void ieee80211_rx_list(struct ieee80211_
+@@ -5385,6 +5386,14 @@ void ieee80211_rx_list(struct ieee80211_
  			ieee80211_is_data_present(hdr->frame_control))
  			ieee80211_tpt_led_trig_rx(local, skb->len);
  
@@ -25,7 +25,7 @@
  		else
 --- a/local-symbols
 +++ b/local-symbols
-@@ -34,6 +34,7 @@ LIB80211_DEBUG=
+@@ -28,6 +28,7 @@ CFG80211_KUNIT_TEST=
  MAC80211=
  MAC80211_HAS_RC=
  MAC80211_RC_MINSTREL=
@@ -121,7 +121,7 @@
  
 @@ -1029,7 +1029,7 @@ minstrel_ht_refill_sample_rates(struct m
   *  - as long as the max prob rate has a probability of more than 75%, pick
-  *    higher throughput rates, even if the probablity is a bit lower
+  *    higher throughput rates, even if the probability is a bit lower
   */
 -static void
 +void
@@ -1023,7 +1023,7 @@
 +
 +skip_tpc:
 +	if (local->ops->get_txpower) {
-+		if (!local->ops->get_txpower(&local->hw, NULL, &power_limit))
++		if (!local->ops->get_txpower(&local->hw, NULL, 0, &power_limit))
 +			/* use 0.5 dBm steps, ath9k and other drivers
 +			 * implementing get_txpower use that anyway */
 +			seq_printf(s, "pwr_limit;%x\n", power_limit * 2);
@@ -1387,7 +1387,7 @@
 +		if (!local->ops->get_txpower)
 +			return -EOPNOTSUPP;
 +
-+		local->ops->get_txpower(mp->hw, NULL, &txpwr);
++		local->ops->get_txpower(mp->hw, NULL, 0, &txpwr);
 +		txpwr *= 2;
 +
 +		len += scnprintf(buf + len, size - len, "pwr-limit;%x", txpwr);
@@ -2107,7 +2107,7 @@
 +}
 --- a/net/mac80211/ieee80211_i.h
 +++ b/net/mac80211/ieee80211_i.h
-@@ -1184,6 +1184,9 @@ struct ieee80211_sub_if_data {
+@@ -1193,6 +1193,9 @@ struct ieee80211_sub_if_data {
  		struct dentry *default_beacon_key;
  	} debugfs;
  #endif

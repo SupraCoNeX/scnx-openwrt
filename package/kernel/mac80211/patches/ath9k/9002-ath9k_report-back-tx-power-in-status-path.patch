@@ -9,7 +9,7 @@
  static void ath_tx_complete_buf(struct ath_softc *sc, struct ath_buf *bf,
  				struct ath_txq *txq, struct list_head *bf_q,
  				struct ieee80211_sta *sta,
-@@ -91,15 +91,38 @@ static void ath_tx_status(struct ieee802
+@@ -90,15 +90,38 @@ static void ath_tx_status(struct ieee802
  {
  	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
  	struct ieee80211_sta *sta = info->status.status_driver_data[0];
@@ -51,7 +51,7 @@
  
  	dev_kfree_skb(skb);
  }
-@@ -381,7 +404,7 @@ static void ath_tid_drain(struct ath_sof
+@@ -378,7 +401,7 @@ static void ath_tid_drain(struct ath_sof
  		bf = fi->bf;
  
  		if (!bf) {
@@ -60,7 +60,7 @@
  			continue;
  		}
  
-@@ -2487,13 +2510,15 @@ void ath_tx_cabq(struct ieee80211_hw *hw
+@@ -2483,13 +2506,15 @@ void ath_tx_cabq(struct ieee80211_hw *hw
  
  static void ath_tx_complete(struct ath_softc *sc, struct sk_buff *skb,
  			    int tx_flags, struct ath_txq *txq,
@@ -77,7 +77,7 @@
  
  	ath_dbg(common, XMIT, "TX complete: skb: %p\n", skb);
  
-@@ -2532,8 +2557,20 @@ static void ath_tx_complete(struct ath_s
+@@ -2528,8 +2553,20 @@ static void ath_tx_complete(struct ath_s
  	}
  	spin_unlock_irqrestore(&sc->sc_pm_lock, flags);
  
@@ -92,13 +92,13 @@
 +		}
 +	}
 +
- 	ath_txq_skb_done(sc, txq, skb);
+ 	ath_txq_skb_done(sc, skb);
  	tx_info->status.status_driver_data[0] = sta;
 +	tx_info->status.status_driver_data[1] = status_ext;
  	__skb_queue_tail(&txq->complete_q, skb);
  }
  
-@@ -2567,7 +2604,7 @@ static void ath_tx_complete_buf(struct a
+@@ -2563,7 +2600,7 @@ static void ath_tx_complete_buf(struct a
  			complete(&sc->paprd_complete);
  	} else {
  		ath_debug_stat_tx(sc, bf, ts, txq, tx_flags);

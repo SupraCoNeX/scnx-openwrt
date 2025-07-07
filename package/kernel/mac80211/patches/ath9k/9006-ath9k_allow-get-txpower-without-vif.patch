@@ -1,7 +1,7 @@
 --- a/drivers/net/wireless/ath/ath9k/main.c
 +++ b/drivers/net/wireless/ath/ath9k/main.c
 @@ -2782,10 +2782,13 @@ static int ath9k_get_txpower(struct ieee
- 			     int *dbm)
+ 			     unsigned int link_id, int *dbm)
  {
  	struct ath_softc *sc = hw->priv;
 -	struct ath_vif *avp = (void *)vif->drv_priv;
