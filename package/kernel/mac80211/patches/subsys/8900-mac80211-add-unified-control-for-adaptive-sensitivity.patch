@@ -1,6 +1,6 @@
 --- a/include/net/mac80211.h
 +++ b/include/net/mac80211.h
-@@ -2941,6 +2941,12 @@ enum ieee80211_hw_flags {
+@@ -2948,6 +2948,12 @@ enum ieee80211_hw_flags {
   *
   * @flags: hardware flags, see &enum ieee80211_hw_flags.
   *
@@ -13,7 +13,7 @@
   * @extra_tx_headroom: headroom to reserve in each transmit skb
   *	for use by the driver (e.g. for transmit headers.)
   *
-@@ -3054,6 +3060,7 @@ struct ieee80211_hw {
+@@ -3061,6 +3067,7 @@ struct ieee80211_hw {
  	const char *rate_control_algorithm;
  	void *priv;
  	unsigned long flags[BITS_TO_LONGS(NUM_IEEE80211_HW_FLAGS)];
@@ -21,7 +21,7 @@
  	unsigned int extra_tx_headroom;
  	unsigned int extra_beacon_tailroom;
  	int vif_data_size;
-@@ -3838,6 +3845,41 @@ struct ieee80211_prep_tx_info {
+@@ -3845,6 +3852,41 @@ struct ieee80211_prep_tx_info {
  	int link_id;
  };
  
@@ -63,7 +63,7 @@
  /**
   * struct ieee80211_ops - callbacks from mac80211 to the driver
   *
-@@ -4482,6 +4524,17 @@ struct ieee80211_prep_tx_info {
+@@ -4489,6 +4531,17 @@ struct ieee80211_prep_tx_info {
   *      interface with the specified type would be added, and thus drivers that
   *      implement this callback need to handle such cases. The type is the full
   *      &enum nl80211_iftype.
@@ -81,7 +81,7 @@
   */
  struct ieee80211_ops {
  	void (*tx)(struct ieee80211_hw *hw,
-@@ -4868,6 +4921,10 @@ struct ieee80211_ops {
+@@ -4875,6 +4928,10 @@ struct ieee80211_ops {
  			struct ieee80211_neg_ttlm *ttlm);
  	void (*prep_add_interface)(struct ieee80211_hw *hw,
  				   enum nl80211_iftype type);

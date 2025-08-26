@@ -67,7 +67,7 @@
  			return true;
  	}
  
-@@ -1920,7 +1925,7 @@ minstrel_ht_alloc(struct ieee80211_hw *h
+@@ -1913,7 +1918,7 @@ minstrel_ht_alloc(struct ieee80211_hw *h
  
  	minstrel_ht_init_cck_rates(mp);
  	for (i = 0; i < ARRAY_SIZE(mp->hw->wiphy->bands); i++)
