@@ -11,7 +11,7 @@
  
 --- a/drivers/net/wireless/ath/ath9k/main.c
 +++ b/drivers/net/wireless/ath/ath9k/main.c
-@@ -2796,6 +2796,54 @@ static int ath9k_get_txpower(struct ieee
+@@ -2799,6 +2799,54 @@ static int ath9k_get_txpower(struct ieee
  	return 0;
  }
  
@@ -66,7 +66,7 @@
  struct ieee80211_ops ath9k_ops = {
  	.add_chanctx = ieee80211_emulate_add_chanctx,
  	.remove_chanctx = ieee80211_emulate_remove_chanctx,
-@@ -2848,4 +2896,6 @@ struct ieee80211_ops ath9k_ops = {
+@@ -2851,4 +2899,6 @@ struct ieee80211_ops ath9k_ops = {
  	.sw_scan_complete   = ath9k_sw_scan_complete,
  	.get_txpower        = ath9k_get_txpower,
  	.wake_tx_queue      = ath9k_wake_tx_queue,

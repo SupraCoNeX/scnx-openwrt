@@ -116,7 +116,7 @@
  
 --- a/drivers/net/wireless/ath/ath9k/main.c
 +++ b/drivers/net/wireless/ath/ath9k/main.c
-@@ -2813,6 +2813,47 @@ static void ath9k_set_ani(struct ath_sof
+@@ -2816,6 +2816,47 @@ static void ath9k_set_ani(struct ath_sof
  }
  
  static s16
@@ -164,7 +164,7 @@
  ath9k_get_feature_state(struct ieee80211_hw *hw,
  			enum ieee80211_feature_ctrl feature)
  {
-@@ -2823,11 +2864,17 @@ ath9k_get_feature_state(struct ieee80211
+@@ -2826,11 +2867,17 @@ ath9k_get_feature_state(struct ieee80211
  		return (s16)(!(sc->sc_ah->common.disable_ani));
  	case IEEE80211_FTRCTRL_TPC:
  		return (s16)sc->sc_ah->tpc_enabled;
@@ -182,7 +182,7 @@
  static int
  ath9k_set_feature_state(struct ieee80211_hw *hw,
  			enum ieee80211_feature_ctrl feature,
-@@ -2853,6 +2900,15 @@ ath9k_set_feature_state(struct ieee80211
+@@ -2856,6 +2903,15 @@ ath9k_set_feature_state(struct ieee80211
  			mutex_unlock(&sc->mutex);
  		}
  		break;

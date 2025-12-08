@@ -17,7 +17,7 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
 
 --- a/include/net/mac80211.h
 +++ b/include/net/mac80211.h
-@@ -2871,6 +2871,13 @@ struct ieee80211_txq {
+@@ -2875,6 +2875,13 @@ struct ieee80211_txq {
   *	HW flag so drivers can opt in according to their own control, e.g. in
   *	testing.
   *
@@ -31,8 +31,8 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
   * @NUM_IEEE80211_HW_FLAGS: number of hardware flags, used for sizing arrays
   */
  enum ieee80211_hw_flags {
-@@ -2932,6 +2939,8 @@ enum ieee80211_hw_flags {
- 	IEEE80211_HW_DISALLOW_PUNCTURING_5GHZ,
+@@ -2935,6 +2942,8 @@ enum ieee80211_hw_flags {
+ 	IEEE80211_HW_DISALLOW_PUNCTURING,
  	IEEE80211_HW_HANDLES_QUIET_CSA,
  	IEEE80211_HW_STRICT,
 +	IEEE80211_HW_SUPPORTS_TPC_PER_PACKET,
@@ -42,8 +42,8 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
  	NUM_IEEE80211_HW_FLAGS
 --- a/net/mac80211/debugfs.c
 +++ b/net/mac80211/debugfs.c
-@@ -510,6 +510,8 @@ static const char *hw_flag_names[] = {
- 	FLAG(DISALLOW_PUNCTURING_5GHZ),
+@@ -507,6 +507,8 @@ static const char *hw_flag_names[] = {
+ 	FLAG(DISALLOW_PUNCTURING),
  	FLAG(HANDLES_QUIET_CSA),
  	FLAG(STRICT),
 +	FLAG(SUPPORTS_TPC_PER_PACKET),
@@ -53,7 +53,7 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
  
 --- a/net/mac80211/main.c
 +++ b/net/mac80211/main.c
-@@ -1192,6 +1192,11 @@ int ieee80211_register_hw(struct ieee802
+@@ -1188,6 +1188,11 @@ int ieee80211_register_hw(struct ieee802
  			return -EINVAL;
  	}
  

@@ -8,7 +8,7 @@
  
  /*
   * monitor mode reception
-@@ -5414,6 +5415,14 @@ void ieee80211_rx_list(struct ieee80211_
+@@ -5445,6 +5446,14 @@ void ieee80211_rx_list(struct ieee80211_
  			ieee80211_is_data_present(hdr->frame_control))
  			ieee80211_tpt_led_trig_rx(local, skb->len);
  
@@ -2107,7 +2107,7 @@
 +}
 --- a/net/mac80211/ieee80211_i.h
 +++ b/net/mac80211/ieee80211_i.h
-@@ -1201,6 +1201,9 @@ struct ieee80211_sub_if_data {
+@@ -1221,6 +1221,9 @@ struct ieee80211_sub_if_data {
  		struct dentry *default_beacon_key;
  	} debugfs;
  #endif
@@ -2115,5 +2115,5 @@
 +	u8 orca_monitor;
 +#endif
  
+ 	u32 tx_handlers_drop;
  	/* must be last, dynamically sized area in this! */
- 	struct ieee80211_vif vif;
