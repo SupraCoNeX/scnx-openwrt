@@ -113,7 +113,7 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
   *
 --- a/net/mac80211/util.c
 +++ b/net/mac80211/util.c
-@@ -4562,3 +4562,22 @@ bool ieee80211_vif_nan_started(struct ie
+@@ -4609,3 +4609,22 @@ bool ieee80211_vif_nan_started(struct ie
  	return vif->type == NL80211_IFTYPE_NAN && sdata->u.nan.started;
  }
  EXPORT_SYMBOL_GPL(ieee80211_vif_nan_started);

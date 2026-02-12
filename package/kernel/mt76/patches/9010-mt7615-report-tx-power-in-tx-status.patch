@@ -50,7 +50,7 @@
  	}
  
  	rd->val[0] = mt7615_mac_tx_rate_val(dev, mphy, &rates[0], stbc, &bw);
-@@ -1320,10 +1340,54 @@ int mt7615_mac_wtbl_set_key(struct mt761
+@@ -1305,10 +1325,54 @@ int mt7615_mac_wtbl_set_key(struct mt761
  	return err;
  }
  
@@ -106,7 +106,7 @@
  	struct mt7615_rate_set *rs;
  	struct mt76_phy *mphy;
  	int first_idx = 0, last_idx;
-@@ -1332,24 +1396,37 @@ static bool mt7615_fill_txs(struct mt761
+@@ -1317,24 +1381,37 @@ static bool mt7615_fill_txs(struct mt761
  	bool ampdu, cck = false;
  	bool rs_idx;
  	u32 rate_set_tsf;
@@ -156,7 +156,7 @@
  		return false;
  
  	if (!ack_timeout)
-@@ -1366,6 +1443,9 @@ static bool mt7615_fill_txs(struct mt761
+@@ -1351,6 +1428,9 @@ static bool mt7615_fill_txs(struct mt761
  
  	if (fixed_rate) {
  		info->status.rates[0].count = count;
@@ -166,7 +166,7 @@
  		i = 0;
  		goto out;
  	}
-@@ -1380,6 +1460,11 @@ static bool mt7615_fill_txs(struct mt761
+@@ -1365,6 +1445,11 @@ static bool mt7615_fill_txs(struct mt761
  		info->status.rates[0] = rs->probe_rate;
  		info->flags |= IEEE80211_TX_CTL_RATE_CTRL_PROBE;
  
@@ -178,7 +178,7 @@
  		spin_lock_bh(&dev->mt76.lock);
  		if (sta->rate_probe) {
  			struct mt7615_phy *phy = &dev->phy;
-@@ -1393,8 +1478,15 @@ static bool mt7615_fill_txs(struct mt761
+@@ -1378,8 +1463,15 @@ static bool mt7615_fill_txs(struct mt761
  	} else {
  		info->status.rates[0] = rs->rates[first_idx / 2];
  		info->flags &= ~IEEE80211_TX_CTL_RATE_CTRL_PROBE;
@@ -194,7 +194,7 @@
  
  	for (i = 0, idx = first_idx; count && idx <= last_idx; idx++) {
  		struct ieee80211_tx_rate *cur_rate;
-@@ -1406,6 +1498,7 @@ static bool mt7615_fill_txs(struct mt761
+@@ -1391,6 +1483,7 @@ static bool mt7615_fill_txs(struct mt761
  
  		if (idx && (cur_rate->idx != info->status.rates[i].idx ||
  			    cur_rate->flags != info->status.rates[i].flags)) {
@@ -202,7 +202,7 @@
  			i++;
  			if (i == ARRAY_SIZE(info->status.rates)) {
  				i--;
-@@ -1414,9 +1507,15 @@ static bool mt7615_fill_txs(struct mt761
+@@ -1399,9 +1492,15 @@ static bool mt7615_fill_txs(struct mt761
  
  			info->status.rates[i] = *cur_rate;
  			info->status.rates[i].count = 0;
@@ -219,7 +219,7 @@
  	}
  
  out:
-@@ -1427,10 +1526,6 @@ out:
+@@ -1412,10 +1511,6 @@ out:
  		cck = true;
  		fallthrough;
  	case MT_PHY_TYPE_OFDM:
@@ -230,7 +230,7 @@
  		if (mphy->chandef.chan->band == NL80211_BAND_5GHZ)
  			sband = &mphy->sband_5g.sband;
  		else
-@@ -1439,6 +1534,12 @@ out:
+@@ -1424,6 +1519,12 @@ out:
  		final_rate = mt76_get_rate(&dev->mt76, sband, final_rate,
  					   cck);
  		final_rate_flags = 0;
@@ -243,7 +243,7 @@
  		break;
  	case MT_PHY_TYPE_HT_GF:
  	case MT_PHY_TYPE_HT:
-@@ -1446,6 +1547,11 @@ out:
+@@ -1431,6 +1532,11 @@ out:
  		final_rate &= MT_TX_RATE_IDX;
  		if (final_rate > 31)
  			return false;
@@ -255,7 +255,7 @@
  		break;
  	case MT_PHY_TYPE_VHT:
  		final_nss = FIELD_GET(MT_TX_RATE_NSS, final_rate);
-@@ -1453,6 +1559,12 @@ out:
+@@ -1438,6 +1544,12 @@ out:
  		if ((final_rate & MT_TX_RATE_STBC) && final_nss)
  			final_nss--;
  
@@ -268,7 +268,7 @@
  		final_rate_flags |= IEEE80211_TX_RC_VHT_MCS;
  		final_rate = (final_rate & MT_TX_RATE_IDX) | (final_nss << 4);
  		break;
-@@ -1463,6 +1575,20 @@ out:
+@@ -1448,6 +1560,20 @@ out:
  	info->status.rates[i].idx = final_rate;
  	info->status.rates[i].flags = final_rate_flags;
  
@@ -289,7 +289,7 @@
  	return true;
  }
  
-@@ -1482,11 +1608,13 @@ static bool mt7615_mac_add_txs_skb(struc
+@@ -1467,11 +1593,13 @@ static bool mt7615_mac_add_txs_skb(struc
  	mt76_tx_status_lock(mdev, &list);
  	skb = mt76_tx_status_skb_get(mdev, &sta->wcid, pid, &list);
  	if (skb) {
@@ -308,7 +308,7 @@
  		}
  
  		mt76_tx_status_skb_done(mdev, skb, &list);
-@@ -1499,6 +1627,8 @@ static bool mt7615_mac_add_txs_skb(struc
+@@ -1484,6 +1612,8 @@ static bool mt7615_mac_add_txs_skb(struc
  static void mt7615_mac_add_txs(struct mt7615_dev *dev, void *data)
  {
  	struct ieee80211_tx_info info = {};
@@ -317,7 +317,7 @@
  	struct ieee80211_sta *sta = NULL;
  	struct mt7615_sta *msta = NULL;
  	struct mt76_wcid *wcid;
-@@ -1538,9 +1668,12 @@ static void mt7615_mac_add_txs(struct mt
+@@ -1523,9 +1653,12 @@ static void mt7615_mac_add_txs(struct mt
  	if (wcid->phy_idx && dev->mt76.phys[MT_BAND1])
  		mphy = dev->mt76.phys[MT_BAND1];
  

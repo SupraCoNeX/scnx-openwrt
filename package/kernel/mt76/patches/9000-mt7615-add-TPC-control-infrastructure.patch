@@ -35,7 +35,7 @@
  	if (!(info->flags & IEEE80211_TX_CTL_AMPDU))
 --- a/mt7615/main.c
 +++ b/mt7615/main.c
-@@ -719,6 +719,9 @@ static void mt7615_sta_rate_tbl_update(s
+@@ -720,6 +720,9 @@ static void mt7615_sta_rate_tbl_update(s
  		msta->rates[i].count = sta_rates->rate[i].count;
  		msta->rates[i].flags = sta_rates->rate[i].flags;
  

@@ -1,6 +1,6 @@
 --- a/mt7615/main.c
 +++ b/mt7615/main.c
-@@ -1314,6 +1314,51 @@ static void mt7615_set_rekey_data(struct
+@@ -1315,6 +1315,51 @@ static void mt7615_set_rekey_data(struct
  }
  #endif /* CONFIG_PM */
  
@@ -52,7 +52,7 @@
  const struct ieee80211_ops mt7615_ops = {
  	.add_chanctx = ieee80211_emulate_add_chanctx,
  	.remove_chanctx = ieee80211_emulate_remove_chanctx,
-@@ -1365,6 +1410,8 @@ const struct ieee80211_ops mt7615_ops =
+@@ -1366,6 +1411,8 @@ const struct ieee80211_ops mt7615_ops =
  	.set_rekey_data = mt7615_set_rekey_data,
  #endif /* CONFIG_PM */
  	.set_sar_specs = mt7615_set_sar_specs,

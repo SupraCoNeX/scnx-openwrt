@@ -1,6 +1,6 @@
 --- a/mt7615/main.c
 +++ b/mt7615/main.c
-@@ -1343,6 +1343,8 @@ static s16 mt7615_get_feature_state(stru
+@@ -1344,6 +1344,8 @@ static s16 mt7615_get_feature_state(stru
  		return (s16)hw->conf.power_level;
  	case IEEE80211_FTRCTRL_FORCE_RATE_RETRY:
  		return (s16)dev->force_rate_retry_en;
@@ -9,7 +9,7 @@
  	default:
  		return S16_MIN;
  	}
-@@ -1374,6 +1376,9 @@ static int mt7615_set_feature_state(stru
+@@ -1375,6 +1377,9 @@ static int mt7615_set_feature_state(stru
  		mt76_rmw_field(dev, MT_AGG_ARCR, MT_AGG_ARCR_INIT_RATE1, enable);
  		dev->force_rate_retry_en = enable;
  		return 0;
