@@ -3,6 +3,7 @@
 #ifndef _RTL838X_H
 #define _RTL838X_H
 
+#include <asm/mach-rtl838x/mach-rtl83xx.h>
 #include <net/dsa.h>
 
 /* Register definition */
@@ -21,10 +22,6 @@
 #define RTL930X_MAC_FORCE_MODE_CTRL		(0xCA1C)
 #define RTL931X_MAC_FORCE_MODE_CTRL		(0x0DCC)
 
-#define RTL838X_DMY_REG31			(0x3b28)
-#define RTL838X_SDS_MODE_SEL			(0x0028)
-#define RTL838X_SDS_CFG_REG			(0x0034)
-#define RTL838X_INT_MODE_CTRL			(0x005c)
 #define RTL838X_PORT_ISO_CTRL(port)		(0x4100 + ((port) << 2))
 #define RTL839X_PORT_ISO_CTRL(port)		(0x1400 + ((port) << 3))
 
@@ -46,44 +43,75 @@
 #define RTL930X_STAT_CTRL			(0x3248)
 #define RTL931X_STAT_CTRL			(0x5720)
 
-/* Registers of the internal Serdes of the 8390 */
-#define RTL8390_SDS0_1_XSG0			(0xA000)
-#define RTL8390_SDS0_1_XSG1			(0xA100)
-#define RTL839X_SDS12_13_XSG0			(0xB800)
-#define RTL839X_SDS12_13_XSG1			(0xB900)
-#define RTL839X_SDS12_13_PWR0			(0xb880)
-#define RTL839X_SDS12_13_PWR1			(0xb980)
-
-/* Registers of the internal Serdes of the 8380 */
-#define RTL838X_SDS4_FIB_REG0			(0xF800)
-#define RTL838X_SDS4_REG28			(0xef80)
-#define RTL838X_SDS4_DUMMY0			(0xef8c)
-#define RTL838X_SDS5_EXT_REG6			(0xf18c)
-
 /* VLAN registers */
 #define RTL838X_VLAN_CTRL			(0x3A74)
 #define RTL838X_VLAN_PROFILE(idx)		(0x3A88 + ((idx) << 2))
+#define RTL838X_VLAN_PROFILE_MAX		7
 #define RTL838X_VLAN_PORT_EGR_FLTR		(0x3A84)
 #define RTL838X_VLAN_PORT_PB_VLAN		(0x3C00)
 #define RTL838X_VLAN_PORT_IGR_FLTR		(0x3A7C)
 
+#define RTL838X_VLAN_L2_LEARN_EN(i)		(i)
+#define RTL838X_VLAN_L2_UNKN_MC_FLD(pmsk)	(pmsk << 1)
+#define RTL838X_VLAN_IP4_UNKN_MC_FLD(pmsk)	(pmsk << 10)
+#define RTL838X_VLAN_IP6_UNKN_MC_FLD(pmsk)	(pmsk << 19)
+
+#define RTL838X_VLAN_L2_LEARN_EN_R(p)		(p & RTL838X_VLAN_L2_LEARN_EN(1))
+#define RTL838X_VLAN_L2_UNKN_MC_FLD_PMSK(p)	((p >> 1) & (MAX_MC_PMASKS - 1))
+#define RTL838X_VLAN_IP4_UNKN_MC_FLD_PMSK(p)	((p >> 10) & (MAX_MC_PMASKS - 1))
+#define RTL838X_VLAN_IP6_UNKN_MC_FLD_PMSK(p)	((p >> 19) & (MAX_MC_PMASKS - 1))
+
 #define RTL839X_VLAN_PROFILE(idx)		(0x25C0 + (((idx) << 3)))
+#define RTL839X_VLAN_PROFILE_MAX		7
 #define RTL839X_VLAN_CTRL			(0x26D4)
 #define RTL839X_VLAN_PORT_PB_VLAN		(0x26D8)
 #define RTL839X_VLAN_PORT_IGR_FLTR		(0x27B4)
 #define RTL839X_VLAN_PORT_EGR_FLTR		(0x27C4)
 
+#define RTL839X_VLAN_L2_LEARN_EN(i)		(i)
+#define RTL839X_VLAN_L2_UNKN_MC_FLD(pmsk)	(pmsk << 1)
+#define RTL839X_VLAN_IP4_UNKN_MC_FLD(pmsk)	(pmsk << 13)
+#define RTL839X_VLAN_IP6_UNKN_MC_FLD(pmsk)	(pmsk)
+
+#define RTL839X_VLAN_L2_LEARN_EN_R(p)		(p[1] & RTL839X_VLAN_L2_LEARN_EN(1))
+#define RTL839X_VLAN_L2_UNKN_MC_FLD_PMSK(p)	((p[1] >> 1) & (MAX_MC_PMASKS - 1))
+#define RTL839X_VLAN_IP4_UNKN_MC_FLD_PMSK(p)	((p[1] >> 13) & (MAX_MC_PMASKS - 1))
+#define RTL839X_VLAN_IP6_UNKN_MC_FLD_PMSK(p)	((p[0]) & (MAX_MC_PMASKS - 1))
+
 #define RTL930X_VLAN_PROFILE_SET(idx)		(0x9c60 + (((idx) * 20)))
+#define RTL930X_VLAN_PROFILE_MAX		7
 #define RTL930X_VLAN_CTRL			(0x82D4)
 #define RTL930X_VLAN_PORT_PB_VLAN		(0x82D8)
 #define RTL930X_VLAN_PORT_IGR_FLTR		(0x83C0)
 #define RTL930X_VLAN_PORT_EGR_FLTR		(0x83C8)
 
+#define RTL930X_VLAN_L2_UNKN_MC_FLD(pmsk)	(pmsk)
+#define RTL930X_VLAN_IP4_UNKN_MC_FLD(pmsk)	(pmsk)
+#define RTL930X_VLAN_IP6_UNKN_MC_FLD(pmsk)	(pmsk)
+
+#define RTL930X_VLAN_L2_LEARN_EN_R(p)		(p[0] & (3 << 21))
+#define RTL930X_VLAN_L2_UNKN_MC_FLD_PMSK(p)	(p[2] & RTL930X_MC_PMASK_ALL_PORTS)
+#define RTL930X_VLAN_IP4_UNKN_MC_FLD_PMSK(p)	(p[3] & RTL930X_MC_PMASK_ALL_PORTS)
+#define RTL930X_VLAN_IP6_UNKN_MC_FLD_PMSK(p)	(p[4] & RTL930X_MC_PMASK_ALL_PORTS)
+
 #define RTL931X_VLAN_PROFILE_SET(idx)		(0x9800 + (((idx) * 28)))
+#define RTL931X_VLAN_PROFILE_MAX		15
 #define RTL931X_VLAN_CTRL			(0x94E4)
 #define RTL931X_VLAN_PORT_IGR_CTRL		(0x94E8)
 #define RTL931X_VLAN_PORT_IGR_FLTR		(0x96B4)
 #define RTL931X_VLAN_PORT_EGR_FLTR		(0x96C4)
+
+#define RTL931X_VLAN_L2_UNKN_MC_FLD_H(pmsk)	(((u64)pmsk) >> 32)
+#define RTL931X_VLAN_L2_UNKN_MC_FLD_L(pmsk)	(pmsk & GENMASK_ULL(31, 0))
+#define RTL931X_VLAN_IP4_UNKN_MC_FLD_H(pmsk)	(((u64)pmsk) >> 32)
+#define RTL931X_VLAN_IP4_UNKN_MC_FLD_L(pmsk)	(pmsk & GENMASK_ULL(31, 0))
+#define RTL931X_VLAN_IP6_UNKN_MC_FLD_H(pmsk)	(((u64)pmsk) >> 32)
+#define RTL931X_VLAN_IP6_UNKN_MC_FLD_L(pmsk)	(pmsk & GENMASK_ULL(31, 0))
+
+#define RTL931X_VLAN_L2_LEARN_EN_R(p)		(p[0] & (3 << 14))
+#define RTL931X_VLAN_L2_UNKN_MC_FLD_PMSK(p)	((((u64)p[1]) << 32 | p[2]) & RTL931X_MC_PMASK_ALL_PORTS)
+#define RTL931X_VLAN_IP4_UNKN_MC_FLD_PMSK(p)	((((u64)p[3]) << 32 | p[4]) & RTL931X_MC_PMASK_ALL_PORTS)
+#define RTL931X_VLAN_IP6_UNKN_MC_FLD_PMSK(p)	((((u64)p[5]) << 32 | p[6]) & RTL931X_MC_PMASK_ALL_PORTS)
 
 /* Table access registers */
 #define RTL838X_TBL_ACCESS_CTRL_0		(0x6914)
@@ -224,6 +252,11 @@
 
 #define RTL930X_L2_UNKN_UC_FLD_PMSK		(0x9064)
 #define RTL931X_L2_UNKN_UC_FLD_PMSK		(0xC8F4)
+
+#define RTL838X_L2_BC_FLD(pmsk)			(pmsk << 9)
+#define RTL838X_L2_UNKN_UC_FLD(pmsk)		(pmsk)
+#define RTL839X_L2_BC_FLD(pmsk)			(pmsk << 12)
+#define RTL839X_L2_UNKN_UC_FLD(pmsk)		(pmsk)
 
 #define RTL838X_L2_LRN_CONSTRT_EN		(0x3368)
 #define RTL838X_L2_PORT_LRN_CONSTRT		(0x32A0)
@@ -426,6 +459,58 @@
 
 #define RTL930X_INGRESS_FC_CTRL(port)		(0x81CC + ((port / 29) * 4))
 #define RTL930X_INGRESS_FC_CTRL_EN(port)	BIT(port % 29)
+
+/* Switch interrupts */
+#define RTL838X_IMR_GLB				(0x1100)
+#define RTL838X_IMR_PORT_LINK_STS_CHG		(0x1104)
+#define RTL838X_ISR_GLB_SRC			(0x1148)
+#define RTL838X_ISR_PORT_LINK_STS_CHG		(0x114C)
+
+#define RTL839X_IMR_GLB				(0x0064)
+#define RTL839X_IMR_PORT_LINK_STS_CHG		(0x0068)
+#define RTL839X_ISR_GLB_SRC			(0x009c)
+#define RTL839X_ISR_PORT_LINK_STS_CHG		(0x00a0)
+
+#define RTL930X_IMR_GLB				(0xC628)
+#define RTL930X_IMR_PORT_LINK_STS_CHG		(0xC62C)
+#define RTL930X_ISR_GLB				(0xC658)
+#define RTL930X_ISR_PORT_LINK_STS_CHG		(0xC660)
+
+/* IMR_GLB does not exit on RTL931X */
+#define RTL931X_IMR_PORT_LINK_STS_CHG		(0x126C)
+#define RTL931X_ISR_GLB_SRC			(0x12B4)
+#define RTL931X_ISR_PORT_LINK_STS_CHG		(0x12B8)
+
+/*
+ * MDIO via Realtek's SMI interface
+ */
+#define RTL838X_SMI_GLB_CTRL			(0xa100)
+#define RTL838X_SMI_POLL_CTRL			(0xa17c)
+
+#define RTL839X_SMI_GLB_CTRL			(0x03f8)
+#define RTL839X_SMI_PORT_POLLING_CTRL		(0x03fc)
+
+#define RTL930X_SMI_POLL_CTRL			(0xca90)
+#define RTL931X_SMI_PORT_POLLING_CTRL		(0x0CCC)
+
+#define RTL838X_LED_GLB_CTRL			(0xA000)
+#define RTL839X_LED_GLB_CTRL			(0x00E4)
+#define RTL930X_LED_GLB_CTRL			(0xCC00)
+#define RTL931X_LED_GLB_CTRL			(0x0600)
+
+/* LED control by switch */
+#define RTL838X_LED_MODE_SEL			(0x1004)
+#define RTL838X_LED_MODE_CTRL			(0xA004)
+#define RTL838X_LED_P_EN_CTRL			(0xA008)
+
+/* LED control by software */
+#define RTL838X_LED_SW_CTRL			(0xA00C)
+#define RTL838X_LED0_SW_P_EN_CTRL		(0xA010)
+#define RTL838X_LED1_SW_P_EN_CTRL		(0xA014)
+#define RTL838X_LED2_SW_P_EN_CTRL		(0xA018)
+#define RTL838X_LED_SW_P_CTRL			(0xA01C)
+#define RTL838X_LED_SW_P_CTRL_PORT(p)		(RTL838X_LED_SW_P_CTRL + (((p) << 2)))
+
 
 /* special port action controls */
 /* values:
@@ -667,8 +752,20 @@ typedef enum {
 #define MAX_LAGS 16
 #define MAX_PRIOS 8
 #define RTL930X_PORT_IGNORE 0x3f
+/* ToDo: MAX_MC_GROUPS could be increased
+ * 838x/839x/930x/931x -> 8192/16384/16384/32768 entries (priv->fib_entries)
+ * They are shared with unicast entries
+ */
 #define MAX_MC_GROUPS 512
-#define UNKNOWN_MC_PMASK (MAX_MC_GROUPS - 1)
+/* ToDo: MAX_MC_PMASKS could be increased
+ * 838x/839x/930x/931x -> 512/4096/1024/4096 entries
+ */
+#define MAX_MC_PMASKS 512
+#define RTL838X_MC_PMASK_ALL_PORTS (GENMASK(RTL838X_CPU_PORT, 0))
+#define RTL839X_MC_PMASK_ALL_PORTS (GENMASK_ULL(RTL839X_CPU_PORT, 0))
+#define RTL930X_MC_PMASK_ALL_PORTS (GENMASK(RTL930X_CPU_PORT, 0))
+#define RTL931X_MC_PMASK_ALL_PORTS (GENMASK_ULL(RTL931X_CPU_PORT, 0))
+#define MC_PMASK_ALL_PORTS_IDX	((MAX_MC_PMASKS - 1))
 #define PIE_BLOCK_SIZE 128
 #define MAX_PIE_ENTRIES (18 * PIE_BLOCK_SIZE)
 #define N_FIXED_FIELDS 12
@@ -1134,7 +1231,7 @@ struct rtldsa_mirror_config {
 	u32 val;
 };
 
-struct rtl838x_reg {
+struct rtldsa_config {
 	void (*mask_port_reg_be)(u64 clear, u64 set, int reg);
 	void (*set_port_reg_be)(u64 set, int reg);
 	u64 (*get_port_reg_be)(int reg);
@@ -1192,7 +1289,7 @@ struct rtl838x_reg {
 	void (*enable_mcast_flood)(int port, bool enable);
 	void (*enable_bcast_flood)(int port, bool enable);
 	void (*set_static_move_action)(int port, bool forward);
-	void (*stp_get)(struct rtl838x_switch_priv *priv, u16 msti, u32 port_state[]);
+	int (*stp_get)(struct rtl838x_switch_priv *priv, u16 msti, int port, u32 port_state[]);
 	void (*stp_set)(struct rtl838x_switch_priv *priv, u16 msti, u32 port_state[]);
 	int  (*mac_force_mode_ctrl)(int port);
 	int  (*mac_port_ctrl)(int port);
@@ -1251,7 +1348,6 @@ struct rtl838x_switch_priv {
 	struct device *dev;
 	u16 id;
 	u16 family_id;
-	char version;
 	struct rtl838x_port ports[57];
 	struct phylink_pcs *pcs[57];
 	struct mutex reg_mutex;		/* Mutex for individual register manipulations */
@@ -1259,7 +1355,7 @@ struct rtl838x_switch_priv {
 	int link_state_irq;
 	int mirror_group_ports[4];
 	struct mii_bus *parent_bus;
-	const struct rtl838x_reg *r;
+	const struct rtldsa_config *r;
 	u8 cpu_port;
 	u8 port_mask;
 	u8 port_width;

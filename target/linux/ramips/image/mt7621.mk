@@ -742,6 +742,16 @@ define Device/cudy_ap1300-outdoor-v1
 endef
 TARGET_DEVICES += cudy_ap1300-outdoor-v1
 
+define Device/cudy_c200p
+  $(Device/dsa-migration)
+  DEVICE_VENDOR := Cudy
+  DEVICE_MODEL := C200P
+  IMAGE_SIZE := 15872k
+  UIMAGE_NAME := R74
+  DEVICE_PACKAGES := -uboot-envtools -wpad-basic-mbedtls kmod-usb3
+endef
+TARGET_DEVICES += cudy_c200p
+
 define Device/cudy_m1300-v2
   $(Device/dsa-migration)
   IMAGE_SIZE := 15872k
@@ -764,6 +774,16 @@ define Device/cudy_m1800
   DEVICE_PACKAGES := kmod-mt7915-firmware -uboot-envtools
 endef
 TARGET_DEVICES += cudy_m1800
+
+define Device/cudy_r700
+  $(Device/dsa-migration)
+  DEVICE_VENDOR := Cudy
+  DEVICE_MODEL := R700
+  IMAGE_SIZE := 15872k
+  UIMAGE_NAME := R29
+  DEVICE_PACKAGES := -uboot-envtools -wpad-basic-mbedtls
+endef
+TARGET_DEVICES += cudy_r700
 
 define Device/cudy_wr1300-v1
   $(Device/dsa-migration)
@@ -810,26 +830,6 @@ define Device/cudy_wr2100
   DEVICE_PACKAGES := kmod-mt7603 kmod-mt7615-firmware -uboot-envtools
 endef
 TARGET_DEVICES += cudy_wr2100
-
-define Device/cudy_r700
-  $(Device/dsa-migration)
-  DEVICE_VENDOR := Cudy
-  DEVICE_MODEL := R700
-  IMAGE_SIZE := 15872k
-  UIMAGE_NAME := R29
-  DEVICE_PACKAGES := -uboot-envtools -wpad-basic-mbedtls
-endef
-TARGET_DEVICES += cudy_r700
-
-define Device/cudy_c200p
-  $(Device/dsa-migration)
-  DEVICE_VENDOR := Cudy
-  DEVICE_MODEL := C200P
-  IMAGE_SIZE := 15872k
-  UIMAGE_NAME := R74
-  DEVICE_PACKAGES := -uboot-envtools -wpad-basic-mbedtls kmod-usb3
-endef
-TARGET_DEVICES += cudy_c200p
 
 define Device/cudy_x6-v1
   $(Device/dsa-migration)
@@ -947,6 +947,19 @@ define Device/dlink_dir_nand_128m
   IMAGE/recovery.bin := append-kernel | pad-to $$(KERNEL_SIZE) | append-ubi | \
 	check-size
 endef
+
+define Device/dlink_dir-1360-a1
+  $(Device/dlink_dir_nand_128m)
+  DEVICE_VENDOR := D-Link
+  DEVICE_MODEL := DIR-1360
+  DEVICE_VARIANT := A1
+  DEVICE_PACKAGES := kmod-mt7615-firmware kmod-usb3 kmod-usb-ledtrig-usbport
+  IMAGE_SIZE := 40960k
+  IMAGES := factory.bin sysupgrade.bin
+  IMAGE/factory.bin := $$(IMAGE/recovery.bin)
+  IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
+endef
+TARGET_DEVICES += dlink_dir-1360-a1
 
 define Device/dlink_dir-1935-a1
   $(Device/dlink_dir-8xx-a1)
@@ -2240,7 +2253,7 @@ TARGET_DEVICES += mikrotik_routerboard-m11g
 define Device/mikrotik_routerboard-m33g
   $(Device/MikroTik)
   DEVICE_MODEL := RouterBOARD M33G
-  DEVICE_PACKAGES := -wpad-basic-mbedtls
+  DEVICE_PACKAGES := kmod-usb3 -wpad-basic-mbedtls
   SUPPORTED_DEVICES += mikrotik,rbm33g
 endef
 TARGET_DEVICES += mikrotik_routerboard-m33g
