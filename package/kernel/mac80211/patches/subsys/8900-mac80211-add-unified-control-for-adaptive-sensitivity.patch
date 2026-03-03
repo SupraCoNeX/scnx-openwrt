@@ -1,6 +1,6 @@
 --- a/include/net/mac80211.h
 +++ b/include/net/mac80211.h
-@@ -2951,6 +2951,12 @@ enum ieee80211_hw_flags {
+@@ -2976,6 +2976,12 @@ enum ieee80211_hw_flags {
   *
   * @flags: hardware flags, see &enum ieee80211_hw_flags.
   *
@@ -13,7 +13,7 @@
   * @extra_tx_headroom: headroom to reserve in each transmit skb
   *	for use by the driver (e.g. for transmit headers.)
   *
-@@ -3064,6 +3070,7 @@ struct ieee80211_hw {
+@@ -3089,6 +3095,7 @@ struct ieee80211_hw {
  	const char *rate_control_algorithm;
  	void *priv;
  	unsigned long flags[BITS_TO_LONGS(NUM_IEEE80211_HW_FLAGS)];
@@ -21,7 +21,7 @@
  	unsigned int extra_tx_headroom;
  	unsigned int extra_beacon_tailroom;
  	int vif_data_size;
-@@ -3852,6 +3859,41 @@ struct ieee80211_prep_tx_info {
+@@ -3877,6 +3884,41 @@ struct ieee80211_prep_tx_info {
  	int link_id;
  };
  
@@ -63,28 +63,29 @@
  /**
   * struct ieee80211_ops - callbacks from mac80211 to the driver
   *
-@@ -4509,6 +4551,17 @@ struct ieee80211_prep_tx_info {
-  *      interface with the specified type would be added, and thus drivers that
-  *      implement this callback need to handle such cases. The type is the full
-  *      &enum nl80211_iftype.
-+ * @get_feature_state: Get the current state if the specified feature. @state
-+ *	can be any value whose meaning is subject to the specific feature.
-+ *	However, S16_MIN must not be used because this must be returned in case
-+ *	the feature is not supported. A caller should always check @feature_ctrl
-+ *	in struct ieee80211_hw prior to calling this.
-+ * @set_feature_state: Sets the state of the specified feature of the
-+ *	hardware/driver. This may return 0 denoting the success and a positive
-+ *	non-zero value denoting failure. It must return a negative value in
-+ *	case the feature is not supported or cannot be controlled dynamically.
-+ *	@state can be any arbitrary value whose meaning is subject to the
-+ *	specified feature, however, S16_MIN is forbidden (see @get_feature_state).
+@@ -4537,6 +4579,17 @@ struct ieee80211_prep_tx_info {
+  * @set_eml_op_mode: Configure eMLSR/eMLMR operation mode in the underlay
+  *	driver according to the parameter received in the EML Operating mode
+  *	notification frame.
++ * @get_feature_state: Get the current state of the specified feature. @state
++ * 	can be any value whose meaning is subject to the specific feature.
++ * 	However, S16_MIN must not be used because this must be returned in case
++ * 	the feature is not supported. A caller should always check @feature_ctrl
++ * 	in struct ieee80211_hw prior to calling this.
++ * @set_feature_state: Set the state if the specified feature of the hardware/driver.
++ * 	This may return 0 denoting the success and a positive non-zero value denoting
++ * 	failure. It must return a negative value in case the feature is not supported
++ * 	or cannot be controlled dynamically.
++ * 	@state can be any arbitrary value whose meaning is subject to the specified
++ * 	feature, however, S16_MIN is forbidden (see @get_feature_state).
   */
  struct ieee80211_ops {
  	void (*tx)(struct ieee80211_hw *hw,
-@@ -4904,6 +4957,10 @@ struct ieee80211_ops {
- 			struct ieee80211_neg_ttlm *ttlm);
- 	void (*prep_add_interface)(struct ieee80211_hw *hw,
- 				   enum nl80211_iftype type);
+@@ -4936,6 +4989,11 @@ struct ieee80211_ops {
+ 			       struct ieee80211_vif *vif,
+ 			       struct ieee80211_sta *sta,
+ 			       struct ieee80211_eml_params *eml_params);
++
 +	s16 (*get_feature_state)(struct ieee80211_hw *hw,
 +				 enum ieee80211_feature_ctrl feature);
 +	int (*set_feature_state)(struct ieee80211_hw *hw,

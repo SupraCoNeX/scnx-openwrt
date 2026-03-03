@@ -41,7 +41,7 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
  				};
  				/* only needed before rate control */
  				unsigned long jiffies;
-@@ -2357,6 +2360,10 @@ enum ieee80211_sta_rx_bandwidth {
+@@ -2382,6 +2385,10 @@ enum ieee80211_sta_rx_bandwidth {
   * @rcu_head: RCU head used for freeing the table on update
   * @rate: transmit rates/flags to be used by default.
   *	Overriding entries per-packet is possible by using cb tx control.
@@ -52,7 +52,7 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
   */
  struct ieee80211_sta_rates {
  	struct rcu_head rcu_head;
-@@ -2366,6 +2373,7 @@ struct ieee80211_sta_rates {
+@@ -2391,6 +2398,7 @@ struct ieee80211_sta_rates {
  		u8 count_cts;
  		u8 count_rts;
  		u16 flags;

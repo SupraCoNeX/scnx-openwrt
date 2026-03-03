@@ -47,7 +47,7 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
  };
  
  /**
-@@ -2933,6 +2933,27 @@ enum ieee80211_hw_flags {
+@@ -2958,6 +2958,27 @@ enum ieee80211_hw_flags {
  };
  
  /**
@@ -75,7 +75,7 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
   * struct ieee80211_hw - hardware information and state
   *
   * This structure contains the configuration and hardware
-@@ -3058,11 +3079,11 @@ enum ieee80211_hw_flags {
+@@ -3083,11 +3104,11 @@ enum ieee80211_hw_flags {
   *
   * @max_mtu: the max mtu could be set.
   *
@@ -91,7 +91,7 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
   */
  struct ieee80211_hw {
  	struct ieee80211_conf conf;
-@@ -3100,8 +3121,8 @@ struct ieee80211_hw {
+@@ -3125,8 +3146,8 @@ struct ieee80211_hw {
  	u8 tx_sk_pacing_shift;
  	u8 weight_multiplier;
  	u32 max_mtu;
@@ -102,7 +102,7 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
  };
  
  static inline bool _ieee80211_hw_check(struct ieee80211_hw *hw,
-@@ -3118,6 +3139,8 @@ static inline void _ieee80211_hw_set(str
+@@ -3143,6 +3164,8 @@ static inline void _ieee80211_hw_set(str
  }
  #define ieee80211_hw_set(hw, flg)	_ieee80211_hw_set(hw, IEEE80211_HW_##flg)
  
