@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
-#include <asm/mach-rtl838x/mach-rtl83xx.h>
+#include <asm/mach-rtl-otto/mach-rtl-otto.h>
 #include <linux/etherdevice.h>
 
 #include "rtl83xx.h"
@@ -24,11 +24,6 @@
 #define RTL931X_VLAN_PORT_TAG_OTPID_KEEP_MASK			GENMASK(3, 3)
 #define RTL931X_VLAN_PORT_TAG_ITPID_IDX_MASK			GENMASK(2, 1)
 #define RTL931X_VLAN_PORT_TAG_ITPID_KEEP_MASK			GENMASK(0, 0)
-
-#define RTLDSA_931X_SMI_PHY_ABLTY_GET_SEL			0x0cac
-#define  RTLDSA_931X_PHY_ABLTY_OUTBAND_MDIO			0x0
-#define  RTLDSA_931X_PHY_ABLTY_INBAND_SDS_POLL			0x1
-#define  RTLDSA_931X_PHY_ABLTY_SDS_ABLTY_BUS			0x2
 
 /* Definition of the RTL931X-specific template field IDs as used in the PIE */
 enum template_field_id {
@@ -137,26 +132,41 @@ inline int rtl931x_tbl_access_data_0(int i)
 	return RTL931X_TBL_ACCESS_DATA_0(i);
 }
 
-static void rtl931x_vlan_profile_dump(int index)
+static int
+rtldsa_931x_vlan_profile_get(int idx, struct rtldsa_vlan_profile *profile)
 {
 	u32 p[7];
 
-	if (index < 0 || index > RTL931X_VLAN_PROFILE_MAX)
+	if (idx < 0 || idx > RTL931X_VLAN_PROFILE_MAX)
+		return -EINVAL;
+
+	for (int i = 0; i < 7; i++)
+		p[i] = sw_r32(RTL931X_VLAN_PROFILE_SET(idx) + i * 4);
+
+	*profile = (struct rtldsa_vlan_profile) {
+		.l2_learn = RTL931X_VLAN_L2_LEARN_EN_R(p),
+		.unkn_mc_fld.pmsks = {
+			.l2 = RTL931X_VLAN_L2_UNKN_MC_FLD_PMSK(p),
+			.ip = RTL931X_VLAN_IP4_UNKN_MC_FLD_PMSK(p),
+			.ip6 = RTL931X_VLAN_IP6_UNKN_MC_FLD_PMSK(p),
+		},
+	};
+
+	return 0;
+}
+
+static void
+rtldsa_931x_vlan_profile_dump(struct rtl838x_switch_priv *priv, int idx)
+{
+	struct rtldsa_vlan_profile p;
+
+	if (rtldsa_931x_vlan_profile_get(idx, &p) < 0)
 		return;
 
-	p[0] = sw_r32(RTL931X_VLAN_PROFILE_SET(index));
-	p[1] = sw_r32(RTL931X_VLAN_PROFILE_SET(index) + 4);
-	p[2] = sw_r32(RTL931X_VLAN_PROFILE_SET(index) + 8);
-	p[3] = sw_r32(RTL931X_VLAN_PROFILE_SET(index) + 12);
-	p[4] = sw_r32(RTL931X_VLAN_PROFILE_SET(index) + 16);
-	p[5] = sw_r32(RTL931X_VLAN_PROFILE_SET(index) + 20);
-	p[6] = sw_r32(RTL931X_VLAN_PROFILE_SET(index) + 24);
-
-	pr_debug("VLAN %d: L2 learning: %d, L2 Unknown MultiCast Field %llx, IPv4 Unknown MultiCast Field %llx, IPv6 Unknown MultiCast Field: %llx\n",
-		 index, RTL931X_VLAN_L2_LEARN_EN_R(p),
-		 RTL931X_VLAN_L2_UNKN_MC_FLD_PMSK(p),
-		 RTL931X_VLAN_IP4_UNKN_MC_FLD_PMSK(p),
-		 RTL931X_VLAN_IP6_UNKN_MC_FLD_PMSK(p));
+	dev_dbg(priv->dev,
+		"VLAN %d: L2 learning: %d, L2 Unknown MultiCast Field %llx, IPv4 Unknown MultiCast Field %llx, IPv6 Unknown MultiCast Field: %llx\n",
+		idx, p.l2_learn, p.unkn_mc_fld.pmsks.l2,
+		p.unkn_mc_fld.pmsks.ip, p.unkn_mc_fld.pmsks.ip6);
 }
 
 static int rtldsa_931x_stp_get(struct rtl838x_switch_priv *priv, u16 msti, int port, u32 port_state[])
@@ -385,7 +395,7 @@ irqreturn_t rtl931x_switch_irq(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-void rtl931x_print_matrix(void)
+void rtldsa_931x_print_matrix(void)
 {
 	struct table_reg *r = rtl_table_get(RTL9310_TBL_2, 1);
 
@@ -1331,11 +1341,11 @@ static int rtl931x_pie_rule_add(struct rtl838x_switch_priv *priv, struct pie_rul
 {
 	int idx, block, j;
 	int min_block = 0;
-	int max_block = priv->n_pie_blocks / 2;
+	int max_block = priv->r->n_pie_blocks / 2;
 
 	if (pr->is_egress) {
 		min_block = max_block;
-		max_block = priv->n_pie_blocks;
+		max_block = priv->r->n_pie_blocks;
 	}
 	pr_debug("In %s\n", __func__);
 
@@ -1356,7 +1366,7 @@ static int rtl931x_pie_rule_add(struct rtl838x_switch_priv *priv, struct pie_rul
 			break;
 	}
 
-	if (block >= priv->n_pie_blocks) {
+	if (block >= priv->r->n_pie_blocks) {
 		mutex_unlock(&priv->pie_mutex);
 		return -EOPNOTSUPP;
 	}
@@ -1420,18 +1430,18 @@ static void rtl931x_pie_init(struct rtl838x_switch_priv *priv)
 	sw_w32_mask(0, 1, RTL931X_METER_GLB_CTRL);
 
 	/* Delete all present rules, block size is 128 on all SoC families */
-	rtl931x_pie_rule_del(priv, 0, priv->n_pie_blocks * 128 - 1);
+	rtl931x_pie_rule_del(priv, 0, priv->r->n_pie_blocks * 128 - 1);
 
 	/* Assign first half blocks 0-7 to VACL phase, second half to IACL */
 	/* 3 bits are used for each block, values for PIE blocks are */
 	/* 6: Disabled, 0: VACL, 1: IACL, 2: EACL */
 	/* And for OpenFlow Flow blocks: 3: Ingress Flow table 0, */
 	/* 4: Ingress Flow Table 3, 5: Egress flow table 0 */
-	for (int i = 0; i < priv->n_pie_blocks; i++) {
+	for (int i = 0; i < priv->r->n_pie_blocks; i++) {
 		int pos = (i % 10) * 3;
 		u32 r = RTL931X_PIE_BLK_PHASE_CTRL + 4 * (i / 10);
 
-		if (i < priv->n_pie_blocks / 2)
+		if (i < priv->r->n_pie_blocks / 2)
 			sw_w32_mask(0x7 << pos, 0, r);
 		else
 			sw_w32_mask(0x7 << pos, 1 << pos, r);
@@ -1439,22 +1449,22 @@ static void rtl931x_pie_init(struct rtl838x_switch_priv *priv)
 
 	/* Enable predefined templates 0, 1 for first quarter of all blocks */
 	template_selectors = 0 | (1 << 4);
-	for (int i = 0; i < priv->n_pie_blocks / 4; i++)
+	for (int i = 0; i < priv->r->n_pie_blocks / 4; i++)
 		sw_w32(template_selectors, RTL931X_PIE_BLK_TMPLTE_CTRL(i));
 
 	/* Enable predefined templates 2, 3 for second quarter of all blocks */
 	template_selectors = 2 | (3 << 4);
-	for (int i = priv->n_pie_blocks / 4; i < priv->n_pie_blocks / 2; i++)
+	for (int i = priv->r->n_pie_blocks / 4; i < priv->r->n_pie_blocks / 2; i++)
 		sw_w32(template_selectors, RTL931X_PIE_BLK_TMPLTE_CTRL(i));
 
 	/* Enable predefined templates 0, 1 for third quater of all blocks */
 	template_selectors = 0 | (1 << 4);
-	for (int i = priv->n_pie_blocks / 2; i < priv->n_pie_blocks * 3 / 4; i++)
+	for (int i = priv->r->n_pie_blocks / 2; i < priv->r->n_pie_blocks * 3 / 4; i++)
 		sw_w32(template_selectors, RTL931X_PIE_BLK_TMPLTE_CTRL(i));
 
 	/* Enable predefined templates 2, 3 for fourth quater of all blocks */
 	template_selectors = 2 | (3 << 4);
-	for (int i = priv->n_pie_blocks * 3 / 4; i < priv->n_pie_blocks; i++)
+	for (int i = priv->r->n_pie_blocks * 3 / 4; i < priv->r->n_pie_blocks; i++)
 		sw_w32(template_selectors, RTL931X_PIE_BLK_TMPLTE_CTRL(i));
 }
 
@@ -1483,17 +1493,20 @@ static void rtl931x_vlan_port_pvid_set(int port, enum pbvlan_type type, int pvid
 		sw_w32_mask(0xfff << 14, pvid << 14, RTL931X_VLAN_PORT_IGR_CTRL + (port << 2));
 }
 
-static int rtldsa_931x_vlan_port_fast_age(struct rtl838x_switch_priv *priv, int port, u16 vid)
+static int rtldsa_931x_fast_age(struct rtl838x_switch_priv *priv, int port, int vid)
 {
 	u32 val;
 
-	sw_w32(vid << 20, RTL931X_L2_TBL_FLUSH_CTRL + 4);
+	sw_w32(0, RTL931X_L2_TBL_FLUSH_CTRL + 4);
 
 	val = 0;
 	val |= port << 11;
 	val |= BIT(24); /* compare port id */
-	val |= BIT(26); /* compare VID */
 	val |= BIT(28); /* status - trigger flush */
+	if (vid >= 0) {
+		sw_w32(vid << 20, RTL931X_L2_TBL_FLUSH_CTRL + 4);
+		val |= BIT(26); /* compare VID */
+	}
 	sw_w32(val, RTL931X_L2_TBL_FLUSH_CTRL);
 
 	do { } while (sw_r32(RTL931X_L2_TBL_FLUSH_CTRL) & BIT(28));
@@ -1776,30 +1789,6 @@ static void rtldsa_931x_qos_init(struct rtl838x_switch_priv *priv)
 	rtldsa_931x_qos_set_scheduling_queue_weights(priv);
 }
 
-void rtldsa_931x_config_phy_ability_source(struct rtl838x_switch_priv *priv)
-{
-	u32 phy_ablty_sel[4] = {0};
-
-	for (int port = 0; port < priv->cpu_port; port++) {
-		u32 val = RTLDSA_931X_PHY_ABLTY_OUTBAND_MDIO;
-
-		/* port driven by SerDes */
-		if (!priv->ports[port].phy && priv->pcs[port])
-			val = RTLDSA_931X_PHY_ABLTY_SDS_ABLTY_BUS;
-
-		phy_ablty_sel[port / 16] |= (val & 0x3) << ((port % 16) * 2);
-	}
-
-	pr_debug("%s: phy_ablty_sel [0] %x [1] %x [2] %x [3] %x\n", __func__,
-		 phy_ablty_sel[0], phy_ablty_sel[1], phy_ablty_sel[2],
-		 phy_ablty_sel[3]);
-
-	sw_w32(phy_ablty_sel[0], RTLDSA_931X_SMI_PHY_ABLTY_GET_SEL);
-	sw_w32(phy_ablty_sel[1], RTLDSA_931X_SMI_PHY_ABLTY_GET_SEL + 0x4);
-	sw_w32(phy_ablty_sel[2], RTLDSA_931X_SMI_PHY_ABLTY_GET_SEL + 0x8);
-	sw_w32(phy_ablty_sel[3], RTLDSA_931X_SMI_PHY_ABLTY_GET_SEL + 0xc);
-}
-
 const struct rtldsa_config rtldsa_931x_cfg = {
 	.mask_port_reg_be = rtl839x_mask_port_reg_be,
 	.set_port_reg_be = rtl839x_set_port_reg_be,
@@ -1830,10 +1819,14 @@ const struct rtldsa_config rtldsa_931x_cfg = {
 	.isr_port_link_sts_chg = RTL931X_ISR_PORT_LINK_STS_CHG,
 	.imr_port_link_sts_chg = RTL931X_IMR_PORT_LINK_STS_CHG,
 	/* imr_glb does not exist on RTL931X */
+	.n_counters = 2048,
+	.n_pie_blocks = 16,
+	.port_ignore = 0x3f,
 	.vlan_tables_read = rtl931x_vlan_tables_read,
 	.vlan_set_tagged = rtl931x_vlan_set_tagged,
 	.vlan_set_untagged = rtl931x_vlan_set_untagged,
-	.vlan_profile_dump = rtl931x_vlan_profile_dump,
+	.vlan_profile_get = rtldsa_931x_vlan_profile_get,
+	.vlan_profile_dump = rtldsa_931x_vlan_profile_dump,
 	.vlan_profile_setup = rtl931x_vlan_profile_setup,
 	.vlan_fwd_on_inner = rtl931x_vlan_fwd_on_inner,
 	.stp_get = rtldsa_931x_stp_get,
@@ -1845,6 +1838,7 @@ const struct rtldsa_config rtldsa_931x_cfg = {
 	.get_mirror_config = rtldsa_931x_get_mirror_config,
 	.port_rate_police_add = rtldsa_931x_port_rate_police_add,
 	.port_rate_police_del = rtldsa_931x_port_rate_police_del,
+	.print_matrix = rtldsa_931x_print_matrix,
 	.read_l2_entry_using_hash = rtl931x_read_l2_entry_using_hash,
 	.write_l2_entry_using_hash = rtl931x_write_l2_entry_using_hash,
 	.read_cam = rtl931x_read_cam,
@@ -1852,7 +1846,7 @@ const struct rtldsa_config rtldsa_931x_cfg = {
 	.vlan_port_keep_tag_set = rtl931x_vlan_port_keep_tag_set,
 	.vlan_port_pvidmode_set = rtl931x_vlan_port_pvidmode_set,
 	.vlan_port_pvid_set = rtl931x_vlan_port_pvid_set,
-	.vlan_port_fast_age = rtldsa_931x_vlan_port_fast_age,
+	.fast_age = rtldsa_931x_fast_age,
 	.trk_mbr_ctr = rtldsa_931x_trk_mbr_ctr,
 	.rma_bpdu_fld_pmask = RTL931X_RMA_BPDU_FLD_PMSK,
 	.set_vlan_igr_filter = rtl931x_set_igr_filter,

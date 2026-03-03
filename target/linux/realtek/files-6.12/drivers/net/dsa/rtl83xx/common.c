@@ -12,7 +12,7 @@
 #include <linux/platform_device.h>
 #include <linux/rhashtable.h>
 #include <linux/of_net.h>
-#include <asm/mach-rtl838x/mach-rtl83xx.h>
+#include <asm/mach-rtl-otto/mach-rtl-otto.h>
 
 #include "rtl83xx.h"
 
@@ -473,7 +473,7 @@ int rtl83xx_lag_del(struct dsa_switch *ds, int group, int port)
 // 	mutex_lock(&priv->reg_mutex);
 
 // 	idx = find_first_zero_bit(priv->octet_cntr_use_bm, MAX_COUNTERS);
-// 	if (idx >= priv->n_counters) {
+// 	if (idx >= priv->r->n_counters) {
 // 		mutex_unlock(&priv->reg_mutex);
 // 		return -1;
 // 	}
@@ -499,9 +499,9 @@ int rtl83xx_packet_cntr_alloc(struct rtl838x_switch_priv *priv)
 	 * a 0-bit means the counter is already allocated (for octets)
 	 */
 	idx = find_first_bit(priv->packet_cntr_use_bm, MAX_COUNTERS * 2);
-	if (idx >= priv->n_counters * 2) {
+	if (idx >= priv->r->n_counters * 2) {
 		j = find_first_zero_bit(priv->octet_cntr_use_bm, MAX_COUNTERS);
-		if (j >= priv->n_counters) {
+		if (j >= priv->r->n_counters) {
 			mutex_unlock(&priv->reg_mutex);
 			return -1;
 		}
@@ -575,7 +575,7 @@ static int rtl83xx_l2_nexthop_add(struct rtl838x_switch_priv *priv, struct rtl83
 		e.block_sa = false;
 		e.suspended = false;
 		e.age = 0;			/* With port-ignore */
-		e.port = priv->port_ignore;
+		e.port = priv->r->port_ignore;
 		u64_to_ether_addr(nh->mac, &e.mac[0]);
 	}
 	e.next_hop = true;
@@ -665,7 +665,7 @@ static int rtl83xx_l3_nexthop_update(struct rtl838x_switch_priv *priv,  __be32 i
 		pr_debug("Route with id %d to %pI4 / %d\n", r->id, &r->dst_ip, r->prefix_len);
 
 		r->nh.mac = r->nh.gw = mac;
-		r->nh.port = priv->port_ignore;
+		r->nh.port = priv->r->port_ignore;
 		r->nh.id = r->id;
 
 		/* Do we need to explicitly add a DMAC entry with the route's nh index? */
@@ -1097,7 +1097,7 @@ static int rtldsa_fib4_add(struct rtl838x_switch_priv *priv,
 			int slot;
 
 			route->nh.mac = mac;
-			route->nh.port = priv->port_ignore;
+			route->nh.port = priv->r->port_ignore;
 			route->attr.valid = true;
 			route->attr.action = ROUTE_ACT_TRAP2CPU;
 			route->attr.type = 0;
@@ -1332,7 +1332,7 @@ static int rtldsa_ethernet_loaded(struct platform_device *pdev)
 	struct device_node *ports, *port;
 	int ret = -EPROBE_DEFER;
 
-	ports = of_get_child_by_name(dn, "ports");
+	ports = of_get_child_by_name(dn, "ethernet-ports");
 	if (!ports)
 		return -ENODEV;
 
@@ -1411,64 +1411,46 @@ static int rtl83xx_sw_probe(struct platform_device *pdev)
 		priv->cpu_port = RTL838X_CPU_PORT;
 		priv->port_mask = 0x1f;
 		priv->port_width = 1;
-		priv->irq_mask = 0x0FFFFFFF;
-		priv->ds->num_ports = RTL838X_CPU_PORT + 1;
 		priv->fib_entries = 8192;
 		priv->ds->num_lag_ids = 8;
 		priv->l2_bucket_size = 4;
 		priv->n_mst = 64;
-		priv->n_pie_blocks = 12;
-		priv->port_ignore = 0x1f;
-		priv->n_counters = 128;
 		break;
 	case RTL8390_FAMILY_ID:
 		priv->ds->ops = &rtldsa_83xx_switch_ops;
 		priv->cpu_port = RTL839X_CPU_PORT;
 		priv->port_mask = 0x3f;
 		priv->port_width = 2;
-		priv->irq_mask = 0xFFFFFFFFFFFFFULL;
-		priv->ds->num_ports = RTL839X_CPU_PORT + 1;
 		priv->fib_entries = 16384;
 		priv->ds->num_lag_ids = 16;
 		priv->l2_bucket_size = 4;
 		priv->n_mst = 256;
-		priv->n_pie_blocks = 18;
-		priv->port_ignore = 0x3f;
-		priv->n_counters = 1024;
 		break;
 	case RTL9300_FAMILY_ID:
 		priv->ds->ops = &rtldsa_93xx_switch_ops;
 		priv->cpu_port = RTL930X_CPU_PORT;
 		priv->port_mask = 0x1f;
 		priv->port_width = 1;
-		priv->irq_mask = 0x0FFFFFFF;
-		priv->ds->num_ports = RTL930X_CPU_PORT + 1;
 		priv->fib_entries = 16384;
 		priv->ds->num_lag_ids = 16;
 		sw_w32(0, RTL930X_ST_CTRL);
 		priv->l2_bucket_size = 8;
 		priv->n_mst = 64;
-		priv->n_pie_blocks = 16;
-		priv->port_ignore = 0x3f;
-		priv->n_counters = 2048;
 		break;
 	case RTL9310_FAMILY_ID:
 		priv->ds->ops = &rtldsa_93xx_switch_ops;
 		priv->cpu_port = RTL931X_CPU_PORT;
 		priv->port_mask = 0x3f;
 		priv->port_width = 2;
-		priv->irq_mask = GENMASK_ULL(priv->cpu_port - 1, 0);
-		priv->ds->num_ports = RTL931X_CPU_PORT + 1;
 		priv->fib_entries = 16384;
 		priv->ds->num_lag_ids = 16;
 		sw_w32(0, RTL931x_ST_CTRL);
 		priv->l2_bucket_size = 8;
 		priv->n_mst = 128;
-		priv->n_pie_blocks = 16;
-		priv->port_ignore = 0x3f;
-		priv->n_counters = 2048;
 		break;
 	}
+	priv->ds->num_ports = priv->cpu_port + 1;
+	priv->irq_mask = GENMASK_ULL(priv->cpu_port - 1, 0);
 
 	err = rtl83xx_mdio_probe(priv);
 	if (err) {

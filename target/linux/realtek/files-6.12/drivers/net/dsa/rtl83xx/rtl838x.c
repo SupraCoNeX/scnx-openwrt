@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
-#include <asm/mach-rtl838x/mach-rtl83xx.h>
+#include <asm/mach-rtl-otto/mach-rtl-otto.h>
 #include <linux/etherdevice.h>
 #include <linux/iopoll.h>
 #include <net/nexthop.h>
@@ -111,7 +111,7 @@ static enum template_field_id fixed_templates[N_FIXED_TEMPLATES][N_FIXED_FIELDS]
 	},
 };
 
-void rtl838x_print_matrix(void)
+void rtldsa_838x_print_matrix(void)
 {
 	unsigned volatile int *ptr8;
 
@@ -490,6 +490,29 @@ static void rtl838x_write_mcast_pmask(int idx, u64 portmask)
 	rtl_table_release(q);
 }
 
+static int
+rtldsa_838x_vlan_profile_get(int idx, struct rtldsa_vlan_profile *profile)
+{
+	u32 p;
+
+	if (idx < 0 || idx > RTL838X_VLAN_PROFILE_MAX)
+		return -EINVAL;
+
+	p = sw_r32(RTL838X_VLAN_PROFILE(idx));
+
+	*profile = (struct rtldsa_vlan_profile) {
+		.l2_learn = RTL838X_VLAN_L2_LEARN_EN_R(p),
+		.unkn_mc_fld.pmsks_idx = {
+			.l2 = RTL838X_VLAN_L2_UNKN_MC_FLD_PMSK(p),
+			.ip = RTL838X_VLAN_IP4_UNKN_MC_FLD_PMSK(p),
+			.ip6 = RTL838X_VLAN_IP6_UNKN_MC_FLD_PMSK(p),
+		},
+		.pmsk_is_idx = 1,
+	};
+
+	return 0;
+}
+
 static void rtl838x_vlan_profile_setup(int profile)
 {
 	u32 p = RTL838X_VLAN_L2_LEARN_EN(1) |
@@ -498,13 +521,6 @@ static void rtl838x_vlan_profile_setup(int profile)
 		RTL838X_VLAN_IP6_UNKN_MC_FLD(MC_PMASK_ALL_PORTS_IDX);
 
 	sw_w32(p, RTL838X_VLAN_PROFILE(profile));
-
-	/* RTL8380 and RTL8390 use an index into the portmask table to set the
-	 * unknown multicast portmask, setup a default at a safe location
-	 * On RTL93XX, the portmask is directly set in the profile,
-	 * see e.g. rtl9300_vlan_profile_setup
-	 */
-	rtl838x_write_mcast_pmask(MC_PMASK_ALL_PORTS_IDX, RTL838X_MC_PMASK_ALL_PORTS);
 }
 
 static void rtl838x_l2_learning_setup(void)
@@ -1430,7 +1446,7 @@ static int rtl838x_pie_rule_add(struct rtl838x_switch_priv *priv, struct pie_rul
 
 	mutex_lock(&priv->pie_mutex);
 
-	for (block = 0; block < priv->n_pie_blocks; block++) {
+	for (block = 0; block < priv->r->n_pie_blocks; block++) {
 		for (j = 0; j < 3; j++) {
 			int t = (sw_r32(RTL838X_ACL_BLK_TMPLTE_CTRL(block)) >> (j * 3)) & 0x7;
 
@@ -1443,7 +1459,7 @@ static int rtl838x_pie_rule_add(struct rtl838x_switch_priv *priv, struct pie_rul
 			break;
 	}
 
-	if (block >= priv->n_pie_blocks) {
+	if (block >= priv->r->n_pie_blocks) {
 		mutex_unlock(&priv->pie_mutex);
 		return -EOPNOTSUPP;
 	}
@@ -1487,19 +1503,17 @@ static void rtl838x_pie_init(struct rtl838x_switch_priv *priv)
 		sw_w32(1, RTL838X_ACL_PORT_LOOKUP_CTRL(i));
 
 	/* Power on all PIE blocks */
-	for (int i = 0; i < priv->n_pie_blocks; i++)
+	for (int i = 0; i < priv->r->n_pie_blocks; i++)
 		sw_w32_mask(0, BIT(i), RTL838X_ACL_BLK_PWR_CTRL);
 
 	/* Include IPG in metering */
 	sw_w32(1, RTL838X_METER_GLB_CTRL);
 
 	/* Delete all present rules */
-	rtl838x_pie_rule_del(priv, 0, priv->n_pie_blocks * PIE_BLOCK_SIZE - 1);
+	rtl838x_pie_rule_del(priv, 0, priv->r->n_pie_blocks * PIE_BLOCK_SIZE - 1);
 
-	/* Routing bypasses source port filter: disable write-protection, first */
-	sw_w32_mask(0, 3, RTL838X_INT_RW_CTRL);
+	/* Routing bypasses source port filter */
 	sw_w32_mask(0, 1, RTL838X_DMY_REG27);
-	sw_w32_mask(3, 0, RTL838X_INT_RW_CTRL);
 
 	/* Enable predefined templates 0, 1 and 2 for even blocks */
 	template_selectors = 0 | (1 << 3) | (2 << 6);
@@ -1508,7 +1522,7 @@ static void rtl838x_pie_init(struct rtl838x_switch_priv *priv)
 
 	/* Enable predefined templates 0, 3 and 4 (IPv6 support) for odd blocks */
 	template_selectors = 0 | (3 << 3) | (4 << 6);
-	for (int i = 1; i < priv->n_pie_blocks; i += 2)
+	for (int i = 1; i < priv->r->n_pie_blocks; i += 2)
 		sw_w32(template_selectors, RTL838X_ACL_BLK_TMPLTE_CTRL(i));
 
 	/* Group each pair of physical blocks together to a logical block */
@@ -1615,6 +1629,20 @@ static void rtl838x_vlan_port_pvid_set(int port, enum pbvlan_type type, int pvid
 		sw_w32_mask(0xfff << 16, pvid << 16, RTL838X_VLAN_PORT_PB_VLAN + (port << 2));
 }
 
+static int rtldsa_838x_fast_age(struct rtl838x_switch_priv *priv, int port, int vid)
+{
+	u32 val;
+
+	val = BIT(26) | BIT(23) | (port << 5);
+	if (vid >= 0)
+		val |= BIT(24) | (vid << 10);
+
+	sw_w32(val, priv->r->l2_tbl_flush_ctrl);
+	do { } while (sw_r32(priv->r->l2_tbl_flush_ctrl) & BIT(26));
+
+	return 0;
+}
+
 static int rtl838x_set_ageing_time(unsigned long msec)
 {
 	int t = sw_r32(RTL838X_L2_CTRL_1);
@@ -1671,6 +1699,20 @@ static void rtl838x_set_receive_management_action(int port, rma_ctrl_t type, act
 	}
 }
 
+static void
+rtldsa_838x_vlan_profile_dump(struct rtl838x_switch_priv *priv, int idx)
+{
+	struct rtldsa_vlan_profile p;
+
+	if (rtldsa_838x_vlan_profile_get(idx, &p) < 0)
+		return;
+
+	dev_dbg(priv->dev,
+		"VLAN profile %d: L2 learning: %d, UNKN L2MC FLD PMSK %d, UNKN IPMC FLD PMSK %d, UNKN IPv6MC FLD PMSK: %d\n", idx,
+		p.l2_learn, p.unkn_mc_fld.pmsks_idx.l2,
+		p.unkn_mc_fld.pmsks_idx.ip, p.unkn_mc_fld.pmsks_idx.ip6);
+}
+
 const struct rtldsa_config rtldsa_838x_cfg = {
 	.mask_port_reg_be = rtl838x_mask_port_reg,
 	.set_port_reg_be = rtl838x_set_port_reg,
@@ -1702,11 +1744,15 @@ const struct rtldsa_config rtldsa_838x_cfg = {
 	.isr_port_link_sts_chg = RTL838X_ISR_PORT_LINK_STS_CHG,
 	.imr_port_link_sts_chg = RTL838X_IMR_PORT_LINK_STS_CHG,
 	.imr_glb = RTL838X_IMR_GLB,
+	.n_counters = 128,
+	.n_pie_blocks = 12,
+	.port_ignore = 0x1f,
 	.vlan_tables_read = rtl838x_vlan_tables_read,
 	.vlan_set_tagged = rtl838x_vlan_set_tagged,
 	.vlan_set_untagged = rtl838x_vlan_set_untagged,
 	.mac_force_mode_ctrl = rtl838x_mac_force_mode_ctrl,
-	.vlan_profile_dump = rtl838x_vlan_profile_dump,
+	.vlan_profile_get = rtldsa_838x_vlan_profile_get,
+	.vlan_profile_dump = rtldsa_838x_vlan_profile_dump,
 	.vlan_profile_setup = rtl838x_vlan_profile_setup,
 	.vlan_fwd_on_inner = rtl838x_vlan_fwd_on_inner,
 	.set_vlan_igr_filter = rtl838x_set_igr_filter,
@@ -1722,6 +1768,7 @@ const struct rtldsa_config rtldsa_838x_cfg = {
 	.l2_port_new_salrn = rtl838x_l2_port_new_salrn,
 	.l2_port_new_sa_fwd = rtl838x_l2_port_new_sa_fwd,
 	.get_mirror_config = rtldsa_838x_get_mirror_config,
+	.print_matrix = rtldsa_838x_print_matrix,
 	.read_l2_entry_using_hash = rtl838x_read_l2_entry_using_hash,
 	.write_l2_entry_using_hash = rtl838x_write_l2_entry_using_hash,
 	.read_cam = rtl838x_read_cam,
@@ -1729,6 +1776,7 @@ const struct rtldsa_config rtldsa_838x_cfg = {
 	.vlan_port_keep_tag_set = rtl838x_vlan_port_keep_tag_set,
 	.vlan_port_pvidmode_set = rtl838x_vlan_port_pvidmode_set,
 	.vlan_port_pvid_set = rtl838x_vlan_port_pvid_set,
+	.fast_age = rtldsa_838x_fast_age,
 	.trk_mbr_ctr = rtl838x_trk_mbr_ctr,
 	.rma_bpdu_fld_pmask = RTL838X_RMA_BPDU_FLD_PMSK,
 	.spcl_trap_eapol_ctrl = RTL838X_SPCL_TRAP_EAPOL_CTRL,
@@ -1777,20 +1825,3 @@ irqreturn_t rtl838x_switch_irq(int irq, void *dev_id)
 
 	return IRQ_HANDLED;
 }
-
-void rtl838x_vlan_profile_dump(int profile)
-{
-	u32 p;
-
-	if (profile < 0 || profile > RTL838X_VLAN_PROFILE_MAX)
-		return;
-
-	p = sw_r32(RTL838X_VLAN_PROFILE(profile));
-
-	pr_debug("VLAN profile %d: L2 learning: %d, UNKN L2MC FLD PMSK %d, UNKN IPMC FLD PMSK %d, UNKN IPv6MC FLD PMSK: %d\n",
-		 profile, RTL838X_VLAN_L2_LEARN_EN_R(p),
-		 RTL838X_VLAN_L2_UNKN_MC_FLD_PMSK(p),
-		 RTL838X_VLAN_IP4_UNKN_MC_FLD_PMSK(p),
-		 RTL838X_VLAN_IP6_UNKN_MC_FLD_PMSK(p));
-}
-

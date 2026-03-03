@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
-#include <asm/mach-rtl838x/mach-rtl83xx.h>
+#include <asm/mach-rtl-otto/mach-rtl-otto.h>
 #include <linux/etherdevice.h>
 #include <linux/inetdevice.h>
 
@@ -124,7 +124,7 @@ static enum template_field_id fixed_templates[N_FIXED_TEMPLATES][N_FIXED_FIELDS]
 	},
 };
 
-void rtl930x_print_matrix(void)
+void rtldsa_930x_print_matrix(void)
 {
 	struct table_reg *r = rtl_table_get(RTL9300_TBL_0, 6);
 
@@ -306,31 +306,59 @@ static void rtl930x_vlan_set_tagged(u32 vlan, struct rtl838x_vlan_info *info)
 	rtl_table_release(r);
 }
 
-void rtl930x_vlan_profile_dump(int profile)
+static int
+rtldsa_930x_vlan_profile_get(int idx, struct rtldsa_vlan_profile *profile)
 {
 	u32 p[5];
 
-	if (profile < 0 || profile > RTL930X_VLAN_PROFILE_MAX)
+	if (idx < 0 || idx > RTL930X_VLAN_PROFILE_MAX)
+		return -EINVAL;
+
+	for (int i = 0; i < 5; i++)
+		p[i] = sw_r32(RTL930X_VLAN_PROFILE_SET(idx) + i * 4);
+
+	*profile = (struct rtldsa_vlan_profile) {
+		.l2_learn = RTL930X_VLAN_L2_LEARN_EN_R(p),
+		.unkn_mc_fld.pmsks = {
+			.l2 = RTL930X_VLAN_L2_UNKN_MC_FLD_PMSK(p),
+			.ip = RTL930X_VLAN_IP4_UNKN_MC_FLD_PMSK(p),
+			.ip6 = RTL930X_VLAN_IP6_UNKN_MC_FLD_PMSK(p),
+		},
+		.pmsk_is_idx = 0,
+		.routing_ipuc = p[0] & BIT(17),
+		.routing_ip6uc = p[0] & BIT(16),
+		.routing_ipmc = p[0] & BIT(13),
+		.routing_ip6mc = p[0] & BIT(12),
+		.bridge_ipmc = p[0] & BIT(15),
+		.bridge_ip6mc = p[0] & BIT(14),
+	};
+
+	return 0;
+}
+
+static void
+rtldsa_930x_vlan_profile_dump(struct rtl838x_switch_priv *priv, int idx)
+{
+	struct rtldsa_vlan_profile p;
+
+	if (rtldsa_930x_vlan_profile_get(idx, &p) < 0)
 		return;
 
-	p[0] = sw_r32(RTL930X_VLAN_PROFILE_SET(profile));
-	p[1] = sw_r32(RTL930X_VLAN_PROFILE_SET(profile) + 4);
-	p[2] = sw_r32(RTL930X_VLAN_PROFILE_SET(profile) + 8);
-	p[3] = sw_r32(RTL930X_VLAN_PROFILE_SET(profile) + 12);
-	p[4] = sw_r32(RTL930X_VLAN_PROFILE_SET(profile) + 16);
-
-	pr_debug("VLAN %d: L2 learn: %d; Unknown MC PMasks: L2 %0lx, IPv4 %0lx, IPv6: %0lx",
-		 profile, RTL930X_VLAN_L2_LEARN_EN_R(p),
-		 RTL930X_VLAN_L2_UNKN_MC_FLD_PMSK(p),
-		 RTL930X_VLAN_IP4_UNKN_MC_FLD_PMSK(p),
-		 RTL930X_VLAN_IP6_UNKN_MC_FLD_PMSK(p));
-	pr_debug("  Routing enabled: IPv4 UC %c, IPv6 UC %c, IPv4 MC %c, IPv6 MC %c\n",
-		 p[0] & BIT(17) ? 'y' : 'n', p[0] & BIT(16) ? 'y' : 'n',
-		 p[0] & BIT(13) ? 'y' : 'n', p[0] & BIT(12) ? 'y' : 'n');
-	pr_debug("  Bridge enabled: IPv4 MC %c, IPv6 MC %c,\n",
-		 p[0] & BIT(15) ? 'y' : 'n', p[0] & BIT(14) ? 'y' : 'n');
-	pr_debug("VLAN profile %d: raw %08x %08x %08x %08x %08x\n",
-		 profile, p[0], p[1], p[2], p[3], p[4]);
+	dev_dbg(priv->dev,
+		"VLAN %d: L2 learn: %d; Unknown MC PMasks: L2 %llx, IPv4 %llx, IPv6: %llx\n"
+		"  Routing enabled: IPv4 UC %c, IPv6 UC %c, IPv4 MC %c, IPv6 MC %c\n"
+		"  Bridge enabled: IPv4 MC %c, IPv6 MC %c\n"
+		"VLAN profile %d: raw %08x %08x %08x %08x %08x\n",
+		idx, p.l2_learn, p.unkn_mc_fld.pmsks.l2,
+		p.unkn_mc_fld.pmsks.ip, p.unkn_mc_fld.pmsks.ip6,
+		p.routing_ipuc ? 'y' : 'n', p.routing_ip6uc ? 'y' : 'n',
+		p.routing_ipmc ? 'y' : 'n', p.routing_ip6mc ? 'y' : 'n',
+		p.bridge_ipmc ? 'y' : 'n', p.bridge_ip6mc ? 'y' : 'n', idx,
+		sw_r32(RTL930X_VLAN_PROFILE_SET(idx)),
+		sw_r32(RTL930X_VLAN_PROFILE_SET(idx) + 4),
+		sw_r32(RTL930X_VLAN_PROFILE_SET(idx) + 8) & 0x1FFFFFFF,
+		sw_r32(RTL930X_VLAN_PROFILE_SET(idx) + 12) & 0x1FFFFFFF,
+		sw_r32(RTL930X_VLAN_PROFILE_SET(idx) + 16) & 0x1FFFFFFF);
 }
 
 static void rtl930x_vlan_set_untagged(u32 vlan, u64 portmask)
@@ -867,7 +895,7 @@ void rtl9300_dump_debug(void)
 	}
 	pr_debug("# %08x %08x %08x %08x %08x\n",
 		 sw_r32(r), sw_r32(r + 4), sw_r32(r + 8), sw_r32(r + 12), sw_r32(r + 16));
-	rtl930x_print_matrix();
+	rtldsa_930x_print_matrix();
 	pr_debug("RTL930X_L2_PORT_SABLK_CTRL: %08x, RTL930X_L2_PORT_DABLK_CTRL %08x\n",
 		 sw_r32(RTL930X_L2_PORT_SABLK_CTRL), sw_r32(RTL930X_L2_PORT_DABLK_CTRL)
 
@@ -1951,11 +1979,11 @@ static int rtl930x_pie_rule_add(struct rtl838x_switch_priv *priv, struct pie_rul
 {
 	int idx, block, j, t;
 	int min_block = 0;
-	int max_block = priv->n_pie_blocks / 2;
+	int max_block = priv->r->n_pie_blocks / 2;
 
 	if (pr->is_egress) {
 		min_block = max_block;
-		max_block = priv->n_pie_blocks;
+		max_block = priv->r->n_pie_blocks;
 	}
 	pr_debug("In %s\n", __func__);
 
@@ -1975,7 +2003,7 @@ static int rtl930x_pie_rule_add(struct rtl838x_switch_priv *priv, struct pie_rul
 			break;
 	}
 
-	if (block >= priv->n_pie_blocks) {
+	if (block >= priv->r->n_pie_blocks) {
 		mutex_unlock(&priv->pie_mutex);
 		return -EOPNOTSUPP;
 	}
@@ -2037,29 +2065,29 @@ static void rtl930x_pie_init(struct rtl838x_switch_priv *priv)
 	sw_w32_mask(0, 1, RTL930X_METER_GLB_CTRL);
 
 	/* Delete all present rules, block size is 128 on all SoC families */
-	rtl930x_pie_rule_del(priv, 0, priv->n_pie_blocks * 128 - 1);
+	rtl930x_pie_rule_del(priv, 0, priv->r->n_pie_blocks * 128 - 1);
 
 	/* Assign blocks 0-7 to VACL phase (bit = 0), blocks 8-15 to IACL (bit = 1) */
 	sw_w32(0xff00, RTL930X_PIE_BLK_PHASE_CTRL);
 
 	/* Enable predefined templates 0, 1 for first quarter of all blocks */
 	template_selectors = 0 | (1 << 4);
-	for (int i = 0; i < priv->n_pie_blocks / 4; i++)
+	for (int i = 0; i < priv->r->n_pie_blocks / 4; i++)
 		sw_w32(template_selectors, RTL930X_PIE_BLK_TMPLTE_CTRL(i));
 
 	/* Enable predefined templates 2, 3 for second quarter of all blocks */
 	template_selectors = 2 | (3 << 4);
-	for (int i = priv->n_pie_blocks / 4; i < priv->n_pie_blocks / 2; i++)
+	for (int i = priv->r->n_pie_blocks / 4; i < priv->r->n_pie_blocks / 2; i++)
 		sw_w32(template_selectors, RTL930X_PIE_BLK_TMPLTE_CTRL(i));
 
 	/* Enable predefined templates 0, 1 for third half of all blocks */
 	template_selectors = 0 | (1 << 4);
-	for (int i = priv->n_pie_blocks / 2; i < priv->n_pie_blocks * 3 / 4; i++)
+	for (int i = priv->r->n_pie_blocks / 2; i < priv->r->n_pie_blocks * 3 / 4; i++)
 		sw_w32(template_selectors, RTL930X_PIE_BLK_TMPLTE_CTRL(i));
 
 	/* Enable predefined templates 2, 3 for fourth quater of all blocks */
 	template_selectors = 2 | (3 << 4);
-	for (int i = priv->n_pie_blocks * 3 / 4; i < priv->n_pie_blocks; i++)
+	for (int i = priv->r->n_pie_blocks * 3 / 4; i < priv->r->n_pie_blocks; i++)
 		sw_w32(template_selectors, RTL930X_PIE_BLK_TMPLTE_CTRL(i));
 }
 
@@ -2338,17 +2366,20 @@ static void rtl930x_vlan_port_pvid_set(int port, enum pbvlan_type type, int pvid
 		sw_w32_mask(0xfff << 16, pvid << 16, RTL930X_VLAN_PORT_PB_VLAN + (port << 2));
 }
 
-static int rtldsa_930x_vlan_port_fast_age(struct rtl838x_switch_priv *priv, int port, u16 vid)
+static int rtldsa_930x_fast_age(struct rtl838x_switch_priv *priv, int port, int vid)
 {
 	u32 val;
 
 	sw_w32(port << 11, RTL930X_L2_TBL_FLUSH_CTRL + 4);
 
 	val = 0;
-	val |= vid << 12;
 	val |= BIT(26); /* compare port id */
-	val |= BIT(28); /* compare VID */
 	val |= BIT(30); /* status - trigger flush */
+	if (vid >= 0) {
+		val |= BIT(28); /* compare VID */
+		val |= vid << 12;
+	}
+
 	sw_w32(val, RTL930X_L2_TBL_FLUSH_CTRL);
 
 	do { } while (sw_r32(priv->r->l2_tbl_flush_ctrl) & BIT(30));
@@ -2645,10 +2676,14 @@ const struct rtldsa_config rtldsa_930x_cfg = {
 	.isr_port_link_sts_chg = RTL930X_ISR_PORT_LINK_STS_CHG,
 	.imr_port_link_sts_chg = RTL930X_IMR_PORT_LINK_STS_CHG,
 	.imr_glb = RTL930X_IMR_GLB,
+	.n_counters = 2048,
+	.n_pie_blocks = 16,
+	.port_ignore = 0x3f,
 	.vlan_tables_read = rtl930x_vlan_tables_read,
 	.vlan_set_tagged = rtl930x_vlan_set_tagged,
 	.vlan_set_untagged = rtl930x_vlan_set_untagged,
-	.vlan_profile_dump = rtl930x_vlan_profile_dump,
+	.vlan_profile_get = rtldsa_930x_vlan_profile_get,
+	.vlan_profile_dump = rtldsa_930x_vlan_profile_dump,
 	.vlan_profile_setup = rtl930x_vlan_profile_setup,
 	.vlan_fwd_on_inner = rtl930x_vlan_fwd_on_inner,
 	.set_vlan_igr_filter = rtl930x_set_igr_filter,
@@ -2662,6 +2697,7 @@ const struct rtldsa_config rtldsa_930x_cfg = {
 	.get_mirror_config = rtldsa_930x_get_mirror_config,
 	.port_rate_police_add = rtldsa_930x_port_rate_police_add,
 	.port_rate_police_del = rtldsa_930x_port_rate_police_del,
+	.print_matrix = rtldsa_930x_print_matrix,
 	.read_l2_entry_using_hash = rtl930x_read_l2_entry_using_hash,
 	.write_l2_entry_using_hash = rtl930x_write_l2_entry_using_hash,
 	.read_cam = rtl930x_read_cam,
@@ -2669,7 +2705,7 @@ const struct rtldsa_config rtldsa_930x_cfg = {
 	.vlan_port_keep_tag_set = rtl930x_vlan_port_keep_tag_set,
 	.vlan_port_pvidmode_set = rtl930x_vlan_port_pvidmode_set,
 	.vlan_port_pvid_set = rtl930x_vlan_port_pvid_set,
-	.vlan_port_fast_age = rtldsa_930x_vlan_port_fast_age,
+	.fast_age = rtldsa_930x_fast_age,
 	.trk_mbr_ctr = rtl930x_trk_mbr_ctr,
 	.rma_bpdu_fld_pmask = RTL930X_RMA_BPDU_FLD_PMSK,
 	.init_eee = rtl930x_init_eee,

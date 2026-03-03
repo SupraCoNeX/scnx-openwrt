@@ -445,6 +445,18 @@ define U-Boot/mt7981_netis_nx31
   DEPENDS:=+trusted-firmware-a-mt7981-spim-nand-ddr3
 endef
 
+define U-Boot/mt7981_netis_nx32u
+  NAME:=netis NX32U
+  BUILD_SUBTARGET:=filogic
+  BUILD_DEVICES:=netis_nx32u
+  UBOOT_CONFIG:=mt7981_netis_nx32u
+  UBOOT_IMAGE:=u-boot.fip
+  BL2_BOOTDEV:=spim-nand
+  BL2_SOC:=mt7981
+  BL2_DDRTYPE:=ddr3
+  DEPENDS:=+trusted-firmware-a-mt7981-spim-nand-ddr3
+endef
+
 define U-Boot/mt7981_nokia_ea0326gmp
   NAME:=Nokia EA0326GMP
   BUILD_SUBTARGET:=filogic
@@ -844,6 +856,18 @@ define U-Boot/mt7986_zyxel_ex5601-t0
   DEPENDS:=+trusted-firmware-a-mt7986-spim-nand-4k-ddr4
 endef
 
+define U-Boot/mt7986_zyxel_wx5600-t0
+  NAME:=Zyxel WX5600-T0
+  BUILD_SUBTARGET:=filogic
+  BUILD_DEVICES:=zyxel_wx5600-t0-ubootmod
+  UBOOT_CONFIG:=mt7986_zyxel_wx5600-t0
+  UBOOT_IMAGE:=u-boot.fip
+  BL2_BOOTDEV:=spim-nand-4k
+  BL2_SOC:=mt7986
+  BL2_DDRTYPE:=ddr3
+  DEPENDS:=+trusted-firmware-a-mt7986-spim-nand-4k-ddr3
+endef
+
 define U-Boot/mt7987_bananapi_bpi-r4-lite-emmc
   NAME:=BananaPi BPi-R4 Lite
   BUILD_SUBTARGET:=filogic
@@ -1137,6 +1161,7 @@ UBOOT_TARGETS := \
 	mt7981_konka_komi-a31 \
 	mt7981_netis_nx30v2 \
 	mt7981_netis_nx31 \
+	mt7981_netis_nx32u \
 	mt7981_nokia_ea0326gmp \
 	mt7981_openwrt_one-snand \
 	mt7981_openwrt_one-nor \
@@ -1168,6 +1193,7 @@ UBOOT_TARGETS := \
 	mt7986_tplink_tl-xtr8488 \
 	mt7986_xiaomi_redmi-router-ax6000 \
 	mt7986_zyxel_ex5601-t0 \
+	mt7986_zyxel_wx5600-t0 \
 	mt7986_rfb \
 	mt7987_bananapi_bpi-r4-lite-emmc \
 	mt7987_bananapi_bpi-r4-lite-sdmmc \

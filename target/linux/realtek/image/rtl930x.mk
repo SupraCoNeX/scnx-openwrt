@@ -2,11 +2,6 @@
 
 include ./common.mk
 
-define Build/xikestor-nosimg
-  $(STAGING_DIR_HOST)/bin/nosimg-enc -i $@ -o $@.new
-  mv $@.new $@
-endef
-
 define Device/hasivo_s1100w-8xgt-se
   SOC := rtl9303
   DEVICE_VENDOR := Hasivo
@@ -137,6 +132,7 @@ define Device/xikestor_sks8310-8x
   UIMAGE_MAGIC := 0x93000000
   DEVICE_VENDOR := XikeStor
   DEVICE_MODEL := SKS8310-8X
+  DEVICE_PACKAGES := kmod-hwmon-lm75
   IMAGE_SIZE := 20480k
   $(Device/kernel-lzma)
   IMAGE/sysupgrade.bin := \

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
-#include <asm/mach-rtl838x/mach-rtl83xx.h>
+#include <asm/mach-rtl-otto/mach-rtl-otto.h>
 #include <linux/etherdevice.h>
 
 #include "rtl83xx.h"
@@ -117,7 +117,7 @@ static enum template_field_id fixed_templates[N_FIXED_TEMPLATES][N_FIXED_FIELDS]
 	},
 };
 
-void rtl839x_print_matrix(void)
+void rtldsa_839x_print_matrix(void)
 {
 	volatile u64 *ptr9;
 
@@ -519,6 +519,30 @@ static void rtl839x_write_mcast_pmask(int idx, u64 portmask)
 	rtl_table_release(q);
 }
 
+static int
+rtldsa_839x_vlan_profile_get(int idx, struct rtldsa_vlan_profile *profile)
+{
+	u32 p[2];
+
+	if (idx < 0 || idx > RTL839X_VLAN_PROFILE_MAX)
+		return -EINVAL;
+
+	p[0] = sw_r32(RTL839X_VLAN_PROFILE(idx));
+	p[1] = sw_r32(RTL839X_VLAN_PROFILE(idx) + 4);
+
+	*profile = (struct rtldsa_vlan_profile) {
+		.l2_learn = RTL839X_VLAN_L2_LEARN_EN_R(p),
+		.unkn_mc_fld.pmsks_idx = {
+			.l2 = RTL839X_VLAN_L2_UNKN_MC_FLD_PMSK(p),
+			.ip = RTL839X_VLAN_IP4_UNKN_MC_FLD_PMSK(p),
+			.ip6 = RTL839X_VLAN_IP6_UNKN_MC_FLD_PMSK(p),
+		},
+		.pmsk_is_idx = 1,
+	};
+
+	return 0;
+}
+
 static void rtl839x_vlan_profile_setup(int profile)
 {
 	u32 p[2] = { 0, 0 };
@@ -530,8 +554,6 @@ static void rtl839x_vlan_profile_setup(int profile)
 
 	sw_w32(p[0], RTL839X_VLAN_PROFILE(profile));
 	sw_w32(p[1], RTL839X_VLAN_PROFILE(profile) + 4);
-
-	rtl839x_write_mcast_pmask(MC_PMASK_ALL_PORTS_IDX, RTL839X_MC_PMASK_ALL_PORTS);
 }
 
 static void rtl839x_traffic_set(int source, u64 dest_matrix)
@@ -626,22 +648,21 @@ irqreturn_t rtl839x_switch_irq(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-void rtl839x_vlan_profile_dump(int profile)
+static void
+rtldsa_839x_vlan_profile_dump(struct rtl838x_switch_priv *priv, int idx)
 {
-	u32 p[2];
+	struct rtldsa_vlan_profile p;
 
-	if (profile < 0 || profile > RTL839X_VLAN_PROFILE_MAX)
+	if (rtldsa_839x_vlan_profile_get(idx, &p) < 0)
 		return;
 
-	p[0] = sw_r32(RTL839X_VLAN_PROFILE(profile));
-	p[1] = sw_r32(RTL839X_VLAN_PROFILE(profile) + 4);
-
-	pr_debug("VLAN profile %d: L2 learning: %d, UNKN L2MC FLD PMSK %d, UNKN IPMC FLD PMSK %d, UNKN IPv6MC FLD PMSK: %d\n",
-		 profile, RTL839X_VLAN_L2_LEARN_EN_R(p),
-		 RTL839X_VLAN_L2_UNKN_MC_FLD_PMSK(p),
-		 RTL839X_VLAN_IP4_UNKN_MC_FLD_PMSK(p),
-		 RTL839X_VLAN_IP6_UNKN_MC_FLD_PMSK(p));
-	pr_debug("VLAN profile %d: raw %08x, %08x\n", profile, p[0], p[1]);
+	dev_dbg(priv->dev,
+		"VLAN profile %d: L2 learning: %d, UNKN L2MC FLD PMSK %d, UNKN IPMC FLD PMSK %d, UNKN IPv6MC FLD PMSK: %d\n"
+		"VLAN profile %d: raw %08x, %08x\n", idx,
+		p.l2_learn, p.unkn_mc_fld.pmsks_idx.l2,
+		p.unkn_mc_fld.pmsks_idx.ip, p.unkn_mc_fld.pmsks_idx.ip6, idx,
+		sw_r32(RTL839X_VLAN_PROFILE(idx)),
+		sw_r32(RTL839X_VLAN_PROFILE(idx) + 4));
 }
 
 static int rtldsa_839x_stp_get(struct rtl838x_switch_priv *priv, u16 msti, int port, u32 port_state[])
@@ -1333,11 +1354,11 @@ static int rtl839x_pie_rule_add(struct rtl838x_switch_priv *priv, struct pie_rul
 {
 	int idx, block, j, t;
 	int min_block = 0;
-	int max_block = priv->n_pie_blocks / 2;
+	int max_block = priv->r->n_pie_blocks / 2;
 
 	if (pr->is_egress) {
 		min_block = max_block;
-		max_block = priv->n_pie_blocks;
+		max_block = priv->r->n_pie_blocks;
 	}
 
 	mutex_lock(&priv->pie_mutex);
@@ -1353,7 +1374,7 @@ static int rtl839x_pie_rule_add(struct rtl838x_switch_priv *priv, struct pie_rul
 			break;
 	}
 
-	if (block >= priv->n_pie_blocks) {
+	if (block >= priv->r->n_pie_blocks) {
 		mutex_unlock(&priv->pie_mutex);
 		return -EOPNOTSUPP;
 	}
@@ -1388,7 +1409,7 @@ static void rtl839x_pie_init(struct rtl838x_switch_priv *priv)
 	mutex_init(&priv->pie_mutex);
 
 	/* Power on all PIE blocks */
-	for (int i = 0; i < priv->n_pie_blocks; i++)
+	for (int i = 0; i < priv->r->n_pie_blocks; i++)
 		sw_w32_mask(0, BIT(i), RTL839X_PS_ACL_PWR_CTRL);
 
 	/* Set ingress and egress ACL blocks to 50/50: first Egress block is 9 */
@@ -1398,7 +1419,7 @@ static void rtl839x_pie_init(struct rtl838x_switch_priv *priv)
 	sw_w32(1, RTL839X_METER_GLB_CTRL);
 
 	/* Delete all present rules */
-	rtl839x_pie_rule_del(priv, 0, priv->n_pie_blocks * PIE_BLOCK_SIZE - 1);
+	rtl839x_pie_rule_del(priv, 0, priv->r->n_pie_blocks * PIE_BLOCK_SIZE - 1);
 
 	/* Enable predefined templates 0, 1 for blocks 0-2 */
 	template_selectors = 0 | (1 << 3);
@@ -1554,6 +1575,20 @@ static void rtl839x_vlan_port_pvid_set(int port, enum pbvlan_type type, int pvid
 		sw_w32_mask(0xfff << 16, pvid << 16, RTL839X_VLAN_PORT_PB_VLAN + (port << 2));
 }
 
+static int rtldsa_839x_fast_age(struct rtl838x_switch_priv *priv, int port, int vid)
+{
+	u32 val;
+
+	val = BIT(28) | BIT(25) | (port << 6);
+	if (vid >= 0)
+		val |= BIT(26) | (vid << 12);
+
+	sw_w32(val, priv->r->l2_tbl_flush_ctrl);
+	do { } while (sw_r32(priv->r->l2_tbl_flush_ctrl) & BIT(28));
+
+	return 0;
+}
+
 static int rtl839x_set_ageing_time(unsigned long msec)
 {
 	int t = sw_r32(RTL839X_L2_CTRL_1);
@@ -1640,10 +1675,14 @@ const struct rtldsa_config rtldsa_839x_cfg = {
 	.isr_port_link_sts_chg = RTL839X_ISR_PORT_LINK_STS_CHG,
 	.imr_port_link_sts_chg = RTL839X_IMR_PORT_LINK_STS_CHG,
 	.imr_glb = RTL839X_IMR_GLB,
+	.n_counters = 1024,
+	.n_pie_blocks = 18,
+	.port_ignore = 0x3f,
 	.vlan_tables_read = rtl839x_vlan_tables_read,
 	.vlan_set_tagged = rtl839x_vlan_set_tagged,
 	.vlan_set_untagged = rtl839x_vlan_set_untagged,
-	.vlan_profile_dump = rtl839x_vlan_profile_dump,
+	.vlan_profile_get = rtldsa_839x_vlan_profile_get,
+	.vlan_profile_dump = rtldsa_839x_vlan_profile_dump,
 	.vlan_profile_setup = rtl839x_vlan_profile_setup,
 	.vlan_fwd_on_inner = rtl839x_vlan_fwd_on_inner,
 	.vlan_port_keep_tag_set = rtl839x_vlan_port_keep_tag_set,
@@ -1663,10 +1702,12 @@ const struct rtldsa_config rtldsa_839x_cfg = {
 	.l2_port_new_salrn = rtl839x_l2_port_new_salrn,
 	.l2_port_new_sa_fwd = rtl839x_l2_port_new_sa_fwd,
 	.get_mirror_config = rtldsa_839x_get_mirror_config,
+	.print_matrix = rtldsa_839x_print_matrix,
 	.read_l2_entry_using_hash = rtl839x_read_l2_entry_using_hash,
 	.write_l2_entry_using_hash = rtl839x_write_l2_entry_using_hash,
 	.read_cam = rtl839x_read_cam,
 	.write_cam = rtl839x_write_cam,
+	.fast_age = rtldsa_839x_fast_age,
 	.trk_mbr_ctr = rtl839x_trk_mbr_ctr,
 	.rma_bpdu_fld_pmask = RTL839X_RMA_BPDU_FLD_PMSK,
 	.spcl_trap_eapol_ctrl = RTL839X_SPCL_TRAP_EAPOL_CTRL,
