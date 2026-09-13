@@ -53,6 +53,22 @@ endef
 
 $(eval $(call KernelPackage,hid-alps))
 
+define KernelPackage/input-adc-keys
+  SUBMENU:=$(INPUT_MODULES_MENU)
+  TITLE:=ADC Ladder Buttons support
+  DEPENDS:=+kmod-input-core +kmod-iio-core
+  KCONFIG:= \
+	CONFIG_KEYBOARD_ADC \
+	CONFIG_INPUT_KEYBOARD=y
+  FILES:=$(LINUX_DIR)/drivers/input/keyboard/adc-keys.ko
+  AUTOLOAD:=$(call AutoProbe,adc-keys,1)
+endef
+
+define KernelPackage/input-adc-keys/description
+ Buttons/keys input driver for resistor ladder connected on ADC
+endef
+
+$(eval $(call KernelPackage,input-adc-keys))
 
 define KernelPackage/input-core
   SUBMENU:=$(INPUT_MODULES_MENU)
@@ -331,3 +347,26 @@ define KernelPackage/input-serio-libps2/description
 endef
 
 $(eval $(call KernelPackage,input-serio-libps2))
+
+define KernelPackage/rc-core
+  SUBMENU:=$(INPUT_MODULES_MENU)
+  TITLE:=Remote Controller support
+  KCONFIG:= \
+	CONFIG_RC_DEVICES=y \
+	CONFIG_RC_CORE
+  FILES:=$(LINUX_DIR)/drivers/media/rc/rc-core.ko
+  AUTOLOAD:=$(call AutoProbe,rc-core)
+  DEPENDS:=+kmod-input-core
+endef
+
+define KernelPackage/rc-core/description
+ Enable support for Remote Controllers on Linux. This is
+ needed in order to support several video capture adapters,
+ standalone IR receivers/transmitters, and RF receivers.
+
+ Enable this option if you have a video capture board even
+ if you don't need IR, as otherwise, you may not be able to
+ compile the driver for your adapter.
+endef
+
+$(eval $(call KernelPackage,rc-core))

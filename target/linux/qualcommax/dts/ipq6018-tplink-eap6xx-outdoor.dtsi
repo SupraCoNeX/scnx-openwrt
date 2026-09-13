@@ -14,9 +14,9 @@
 	aliases {
 		serial0 = &blsp1_uart3;
 		led-boot = &led_sys_green;
-		led-failsafe = &led_sys_amber;
+		led-failsafe = &led_sys_yellow;
 		led-running = &led_sys_green;
-		led-upgrade = &led_sys_amber;
+		led-upgrade = &led_sys_yellow;
 	};
 
 	chosen {
@@ -37,9 +37,9 @@
 	leds {
 		compatible = "gpio-leds";
 
-		led_sys_amber: led-0 {
+		led_sys_yellow: led-0 {
 			function = "system";
-			color = <LED_COLOR_ID_AMBER>;
+			color = <LED_COLOR_ID_YELLOW>;
 			gpios = <&tlmm 35 GPIO_ACTIVE_HIGH>;
 		};
 
@@ -94,13 +94,6 @@
 	};
 };
 
-&dp5 {
-	phy-handle = <&rtl8211f_4>;
-	phy-mode = "sgmii";
-	label = "lan";
-	status = "okay";
-};
-
 &edma {
 	status = "okay";
 };
@@ -115,18 +108,39 @@
 
 	rtl8211f_4: ethernet-phy@4 {
 		reg = <4>;
+		realtek,clkout-disable;
+		realtek,aldps-enable;
 	};
 };
 
+&uniphy1 {
+	status = "okay";
+};
+
 &switch {
-	switch_lan_bmp = <ESS_PORT5>;
-	switch_mac_mode1 = <MAC_MODE_SGMII_CHANNEL0>;
 	status = "okay";
 
-	qcom,port_phyinfo {
-		port@4 {
-			port_id = <5>;
-			phy_address = <4>;
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			ethernet = <&edma>;
+			phy-mode = "internal";
+
+			fixed-link {
+				speed = <1000>;
+				full-duplex;
+			};
+		};
+
+		swport5: port@5 {
+			reg = <5>;
+			label = "lan";
+			phy-handle = <&rtl8211f_4>;
+			phy-mode = "sgmii";
+			pcs-handle = <&uniphy1 0>;
 		};
 	};
 };

@@ -200,6 +200,22 @@
 				label = "art";
 				reg = <0x7d80000 0x200000>;
 				read-only;
+				volumes {
+
+					ubi-volume-art {
+						volname = "ART";
+
+						art_nvmem: nvmem-layout {
+							compatible = "fixed-layout";
+							#address-cells = <1>;
+							#size-cells = <1>;
+
+							precal_art_5000: pre-calibration@5000 {
+								reg = <0x5000 0x2f20>;
+							};
+						};
+					};
+				};
 			};
 		};
 	};

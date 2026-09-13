@@ -212,12 +212,15 @@
 				#size-cells = <1>;
 
 				cfg1@2a0000 {
-					compatible = "u-boot,env-redundant-bool";
 					label = "CFG1";
 					reg = <0x2a0000 0x0010000>;
 
-					ethaddr: ethaddr {
-						#nvmem-cell-cells = <1>;
+					nvmem-layout {
+						compatible = "u-boot,env-redundant-bool";
+
+						ethaddr: ethaddr {
+							#nvmem-cell-cells = <1>;
+						};
 					};
 				};
 
@@ -311,6 +314,7 @@
 
 	phy1: ethernet-phy@1 {
 		reg = <1>;
+		qca,disable-hibernation-mode;
 	};
 
 	phy2: ethernet-phy@2 {

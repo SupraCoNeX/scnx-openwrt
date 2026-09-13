@@ -182,6 +182,7 @@ platform_do_upgrade() {
 	cmcc,mr3000d-ci|\
 	cmcc,pz-l8|\
 	elecom,wrc-x3000gs2|\
+	elecom,wrc-x3000gst2|\
 	iodata,wn-dax3000gr)
 		local delay
 
@@ -212,7 +213,31 @@ platform_do_upgrade() {
 		remove_oem_ubi_volume ubi_rootfs
 		nand_do_upgrade "$1"
 		;;
-	xiaomi,ax6000)
+	tplink,archer-ax55-v1)
+		# Dual boot: install into the inactive rootfs/rootfs_1 slot,
+		# then point tp_boot_idx at it. The running slot is left
+		# untouched as a fallback - if the new image fails to load,
+		# TP-Link's U-Boot boots the other slot on its own (only on
+		# load failure though: there is no boot counter, a kernel
+		# that boots and then crashes is not detected).
+		local idx=1
+		CI_UBIPART="rootfs_1"
+		if grep -q 'ubi.mtd=rootfs_1' /proc/cmdline; then
+			idx=0
+			CI_UBIPART="rootfs"
+		fi
+		fw_setenv tp_boot_idx $idx || {
+			echo "failed to set tp_boot_idx $idx"
+			return 1
+		}
+		# a slot last written by TP-Link firmware carries extra
+		# volumes that would leave no room for ours
+		remove_oem_ubi_volume ubi_rootfs
+		remove_oem_ubi_volume tp_data
+		nand_do_upgrade "$1"
+		;;
+	xiaomi,ax6000|\
+	xiaomi,redmi-ax5400)
 		# Make sure that UART is enabled
 		fw_setenv boot_wait on
 		fw_setenv uart_en 1
@@ -227,6 +252,7 @@ platform_do_upgrade() {
 		# Kernel and rootfs are placed in 2 different UBI
 		CI_KERN_UBIPART="ubi_kernel"
 		CI_ROOT_UBIPART="rootfs"
+		CI_DATA_UBIPART="rootfs"
 		nand_do_upgrade "$1"
 		;;
 	yuncore,ax830|\
