@@ -14,7 +14,7 @@
  static int __init set_use_msi(const struct dmi_system_id *dmi)
  {
  	ath9k_use_msi = 1;
-@@ -1049,6 +1056,7 @@ static void ath9k_set_hw_capab(struct at
+@@ -1050,6 +1057,7 @@ static void ath9k_set_hw_capab(struct at
  	ieee80211_hw_set(hw, SUPPORT_FAST_XMIT);
  	ieee80211_hw_set(hw, SUPPORTS_CLONED_SKBS);
  	ieee80211_hw_set(hw, MFP_CAPABLE);
@@ -31,4 +31,4 @@
 +	hw->n_txpower_ranges = 1;
  }
  
- static void ath_get_initial_entropy(struct ath_softc *sc)
+ int ath9k_init_device(u16 devid, struct ath_softc *sc,

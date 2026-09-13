@@ -17,9 +17,9 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
 
 --- a/include/net/mac80211.h
 +++ b/include/net/mac80211.h
-@@ -2900,6 +2900,13 @@ struct ieee80211_txq {
-  *	HW flag so drivers can opt in according to their own control, e.g. in
-  *	testing.
+@@ -3082,6 +3082,13 @@ struct ieee80211_txq {
+  * @IEEE80211_HW_SUPPORTS_NDP_BLOCKACK: HW can transmit/receive S1G NDP
+  *	BlockAck frames.
   *
 + * @IEEE80211_HW_SUPPORTS_TPC_PER_PACKET: The hardware/driver supports transmit
 + * 	power control (TPC) with one power level per packet.
@@ -31,10 +31,10 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
   * @NUM_IEEE80211_HW_FLAGS: number of hardware flags, used for sizing arrays
   */
  enum ieee80211_hw_flags {
-@@ -2960,6 +2967,8 @@ enum ieee80211_hw_flags {
- 	IEEE80211_HW_DISALLOW_PUNCTURING,
+@@ -3143,6 +3150,8 @@ enum ieee80211_hw_flags {
  	IEEE80211_HW_HANDLES_QUIET_CSA,
  	IEEE80211_HW_STRICT,
+ 	IEEE80211_HW_SUPPORTS_NDP_BLOCKACK,
 +	IEEE80211_HW_SUPPORTS_TPC_PER_PACKET,
 +	IEEE80211_HW_SUPPORTS_TPC_PER_MRR,
  
@@ -42,10 +42,10 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
  	NUM_IEEE80211_HW_FLAGS
 --- a/net/mac80211/debugfs.c
 +++ b/net/mac80211/debugfs.c
-@@ -507,6 +507,8 @@ static const char *hw_flag_names[] = {
- 	FLAG(DISALLOW_PUNCTURING),
+@@ -483,6 +483,8 @@ static const char *hw_flag_names[] = {
  	FLAG(HANDLES_QUIET_CSA),
  	FLAG(STRICT),
+ 	FLAG(SUPPORTS_NDP_BLOCKACK),
 +	FLAG(SUPPORTS_TPC_PER_PACKET),
 +	FLAG(SUPPORTS_TPC_PER_MRR),
  #undef FLAG
@@ -53,7 +53,7 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
  
 --- a/net/mac80211/main.c
 +++ b/net/mac80211/main.c
-@@ -1188,6 +1188,11 @@ int ieee80211_register_hw(struct ieee802
+@@ -1207,6 +1207,11 @@ int ieee80211_register_hw(struct ieee802
  			return -EINVAL;
  	}
  
