@@ -54,7 +54,7 @@ Signed-off-by: Thomas Huehn <thomas.huehn@hs-nordhausen.de>
  mt7615_pm_set(void *data, u64 val)
  {
  	struct mt7615_dev *dev = data;
-@@ -561,6 +588,7 @@ int mt7615_init_debugfs(struct mt7615_de
+@@ -559,6 +586,7 @@ int mt7615_init_debugfs(struct mt7615_de
  					    mt76_queues_read);
  	debugfs_create_devm_seqfile(dev->mt76.dev, "acq", dir,
  				    mt7615_queues_acq);

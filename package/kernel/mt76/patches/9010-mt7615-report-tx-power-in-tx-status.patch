@@ -364,7 +364,7 @@
  mt7615_force_rate_retry_set(void *data, u64 val)
  {
  	struct mt7615_dev *dev = data;
-@@ -615,6 +638,7 @@ int mt7615_init_debugfs(struct mt7615_de
+@@ -613,6 +636,7 @@ int mt7615_init_debugfs(struct mt7615_de
  	debugfs_create_file("ampdu_stat", 0400, dir, dev, &mt7615_ampdu_stat_fops);
  	debugfs_create_file("scs", 0600, dir, dev, &fops_scs);
  	debugfs_create_file("tpc", 0600, dir, dev, &fops_tpc);

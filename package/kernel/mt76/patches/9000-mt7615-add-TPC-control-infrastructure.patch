@@ -35,7 +35,7 @@
  	if (!(info->flags & IEEE80211_TX_CTL_AMPDU))
 --- a/mt7615/main.c
 +++ b/mt7615/main.c
-@@ -720,6 +720,9 @@ static void mt7615_sta_rate_tbl_update(s
+@@ -722,6 +722,9 @@ static void mt7615_sta_rate_tbl_update(s
  		msta->rates[i].count = sta_rates->rate[i].count;
  		msta->rates[i].flags = sta_rates->rate[i].flags;
  
@@ -95,7 +95,7 @@
  mt7615_force_rate_retry_set(void *data, u64 val)
  {
  	struct mt7615_dev *dev = data;
-@@ -591,6 +614,7 @@ int mt7615_init_debugfs(struct mt7615_de
+@@ -589,6 +612,7 @@ int mt7615_init_debugfs(struct mt7615_de
  	debugfs_create_file("force_rate_retry", 0600, dir, dev, &fops_force_rate_retry);
  	debugfs_create_file("ampdu_stat", 0400, dir, dev, &mt7615_ampdu_stat_fops);
  	debugfs_create_file("scs", 0600, dir, dev, &fops_scs);
