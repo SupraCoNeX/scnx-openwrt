@@ -239,10 +239,14 @@
 };
 
 &usb_0 {
+	dr_mode = "host";
+
 	status = "okay";
 };
 
 &usb_1 {
+	dr_mode = "host";
+
 	status = "okay";
 };
 
@@ -351,6 +355,10 @@
 					macaddr_10g_2: macaddr@1e {
 						reg = <0x1e 0x6>;
 					};
+
+					caldata: calibration@0x1000 {
+						reg = <0x1000 0x20000>;
+					};
 				};
 			};
 
@@ -403,6 +411,8 @@
 		compatible ="ethernet-phy-ieee802.3-c45";
 		reg = <0>;
 		reset-gpios = <&tlmm 44 GPIO_ACTIVE_LOW>;
+		reset-assert-us = <100000>;
+		reset-deassert-us = <250000>;
 		firmware-name = "marvell/AQR-G4_v5.4.C-AQR_CIG_WF-1945_0x0_ID44778_VER1630.cld";
 		nvmem-cell-names = "firmware";
 		nvmem-cells = <&aqr0_fw>;
@@ -412,6 +422,8 @@
 		compatible ="ethernet-phy-ieee802.3-c45";
 		reg = <8>;
 		reset-gpios = <&tlmm 59 GPIO_ACTIVE_LOW>;
+		reset-assert-us = <100000>;
+		reset-deassert-us = <250000>;
 		firmware-name = "marvell/AQR-G4_v5.4.C-AQR_CIG_WF-1945_0x8_ID44776_VER1630.cld";
 		nvmem-cell-names = "firmware";
 		nvmem-cells = <&aqr1_fw>;
@@ -562,5 +574,7 @@
 &wifi {
 	status = "okay";
 
-	qcom,ath11k-calibration-variant = "QNAP-301w";
+	qcom,calibration-variant = "QNAP-301w";
+	nvmem-cell-names = "calibration";
+	nvmem-cells = <&caldata>;
 };
