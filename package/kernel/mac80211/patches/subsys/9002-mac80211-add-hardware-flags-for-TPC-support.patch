@@ -17,9 +17,9 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
 
 --- a/include/net/mac80211.h
 +++ b/include/net/mac80211.h
-@@ -3082,6 +3082,13 @@ struct ieee80211_txq {
-  * @IEEE80211_HW_SUPPORTS_NDP_BLOCKACK: HW can transmit/receive S1G NDP
-  *	BlockAck frames.
+@@ -3107,6 +3107,13 @@ struct ieee80211_txq {
+  *	colour change on the channel of a link of the AP MLD, until the driver
+  *	reports the expiry with ieee80211_links_removed().
   *
 + * @IEEE80211_HW_SUPPORTS_TPC_PER_PACKET: The hardware/driver supports transmit
 + * 	power control (TPC) with one power level per packet.
@@ -31,10 +31,10 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
   * @NUM_IEEE80211_HW_FLAGS: number of hardware flags, used for sizing arrays
   */
  enum ieee80211_hw_flags {
-@@ -3143,6 +3150,8 @@ enum ieee80211_hw_flags {
- 	IEEE80211_HW_HANDLES_QUIET_CSA,
- 	IEEE80211_HW_STRICT,
+@@ -3170,6 +3177,8 @@ enum ieee80211_hw_flags {
  	IEEE80211_HW_SUPPORTS_NDP_BLOCKACK,
+ 	IEEE80211_HW_DEFERRED_AIRTIME_REPORT,
+ 	IEEE80211_HW_AP_REMOVAL_BEACON_HOLD,
 +	IEEE80211_HW_SUPPORTS_TPC_PER_PACKET,
 +	IEEE80211_HW_SUPPORTS_TPC_PER_MRR,
  
@@ -42,10 +42,10 @@ Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
  	NUM_IEEE80211_HW_FLAGS
 --- a/net/mac80211/debugfs.c
 +++ b/net/mac80211/debugfs.c
-@@ -483,6 +483,8 @@ static const char *hw_flag_names[] = {
- 	FLAG(HANDLES_QUIET_CSA),
- 	FLAG(STRICT),
+@@ -485,6 +485,8 @@ static const char *hw_flag_names[] = {
  	FLAG(SUPPORTS_NDP_BLOCKACK),
+ 	FLAG(DEFERRED_AIRTIME_REPORT),
+ 	FLAG(AP_REMOVAL_BEACON_HOLD),
 +	FLAG(SUPPORTS_TPC_PER_PACKET),
 +	FLAG(SUPPORTS_TPC_PER_MRR),
  #undef FLAG
